@@ -70,7 +70,7 @@ struct actor_entry
 struct future
 {
   encore_arg_t      value;
-  pony_type_t    *type;
+  encore_type_t    *type;
   bool            fulfilled;
   // Stupid limitation for now
   actor_entry_t   responsibilities[16];
@@ -85,7 +85,7 @@ struct future
 static inline void future_gc_send(future_t *fut);
 static inline void future_gc_recv(future_t *fut);
 
-pony_type_t future_type = 
+encore_type_t future_type = {
   {
     ID_FUTURE,
     sizeof(struct future),
@@ -94,9 +94,11 @@ pony_type_t future_type =
     NULL,
     NULL,
     NULL
-  };
+  },
+  "Future"
+};
 
-pony_type_t *future_get_type(future_t *fut){
+encore_type_t *future_get_type(future_t *fut){
   return fut->type;
 }
 
@@ -143,7 +145,7 @@ void future_trace(void* p)
 // ===============================================================
 // Create, inspect and fulfil
 // ===============================================================
-future_t *future_mk(pony_type_t *type)
+future_t *future_mk(encore_type_t *type)
 {
   perr("future_mk");
 

@@ -4,6 +4,7 @@
 #include <stdbool.h>
 #include <stdlib.h>
 #include <assert.h>
+#include <encore_provider.h>
 
 extern void pool_free(size_t index, void* p);
 bool has_flag(pony_actor_t* actor, uint8_t flag);
@@ -148,8 +149,10 @@ void actor_resume(encore_actor_t *actor)
   }
 }
 
-encore_actor_t *encore_create(pony_type_t *type)
+encore_actor_t *encore_create(encore_type_t *type)
 {
+  /* Fire actor_create dtrace probe */
+  ENCORE_ACTOR_CREATE(type->class_name, type->id, type->size);
   return (encore_actor_t *)pony_create(type);
 }
 
@@ -163,7 +166,7 @@ void *encore_alloc(size_t s)
 }
 
 /// The starting point of all Encore programs
-int encore_start(int argc, char** argv, pony_type_t *type)
+int encore_start(int argc, char** argv, encore_type_t *type)
 {
   argc = pony_init(argc, argv);
   pony_actor_t* actor = (pony_actor_t *)encore_create(type);

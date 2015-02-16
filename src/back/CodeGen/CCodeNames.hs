@@ -39,8 +39,8 @@ void = Typ "void"
 encore_actor_t :: CCode Ty
 encore_actor_t = Typ "encore_actor_t"
 
-pony_type_t :: CCode Ty
-pony_type_t = Typ "pony_type_t"
+encore_type_t :: CCode Ty
+encore_type_t = Typ "encore_type_t"
 
 pony_actor_t :: CCode Ty
 pony_actor_t = Typ "pony_actor_t"

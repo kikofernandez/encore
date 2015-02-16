@@ -23,7 +23,7 @@ stream_t *stream_mk();
  *  @param type The runtime type of \p value
  *  @return The (empty) head of \p s
  */
-stream_t *stream_put(stream_t *s, encore_arg_t value, pony_type_t *type);
+stream_t *stream_put(stream_t *s, encore_arg_t value, encore_type_t *type);
 
 /**
  *  Read a value from a stream

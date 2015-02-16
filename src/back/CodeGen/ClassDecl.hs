@@ -220,11 +220,12 @@ tracefun_decl A.Class{A.cname, A.fields, A.methods} =
 
 runtime_type_decl cname =
     (AssignTL
-     (Decl (Typ "pony_type_t", AsLval $ runtime_type_name cname))
-           (Record [AsExpr . AsLval . Nam $ ("ID_"++(Ty.getId cname)),
-                    Call (Nam "sizeof") [AsLval $ class_type_name cname],
-                    AsExpr . AsLval $ (class_trace_fn_name cname),
-                    Null,
-                    Null,           
-                    AsExpr . AsLval $ class_dispatch_name cname,
-                    Null]))
+     (Decl (Typ "encore_type_t", AsLval $ runtime_type_name cname))
+           (Record [(Record [AsExpr . AsLval . Nam $ ("ID_"++(Ty.getId cname)),
+                             Call (Nam "sizeof") [AsLval $ class_type_name cname],
+                             AsExpr . AsLval $ (class_trace_fn_name cname),
+                             Null,
+                             Null,           
+                             AsExpr . AsLval $ class_dispatch_name cname,
+                             Null]),
+                     String $ Ty.getId cname]))

@@ -1,0 +1,12 @@
+class TestActor
+  def foo() : void
+    print "hello, world"
+
+class Main
+  def main() : void {
+    embed void 
+      getchar();
+    end;
+    (new TestActor) ! foo();
+  }
+

@@ -76,7 +76,7 @@ generate_header A.Program{A.etl = A.EmbedTL{A.etlheader}, A.functions, A.classes
        [comment_section "Main actor rtti"] ++
        [extern_main_rtti]
     where
-      extern_main_rtti = DeclTL (Typ "extern pony_type_t", Var "_enc__active_Main_type")
+      extern_main_rtti = DeclTL (Typ "extern encore_type_t", Var "_enc__active_Main_type")
 
       shared_messages = 
           [DeclTL (pony_msg_t, Var "m_MSG_alloc"),
@@ -152,7 +152,7 @@ generate_header A.Program{A.etl = A.EmbedTL{A.etlheader}, A.functions, A.classes
 
       runtime_type_decls = map type_decl classes
           where
-            type_decl A.Class{A.cname} = DeclTL (Extern pony_type_t, AsLval $ runtime_type_name cname)
+            type_decl A.Class{A.cname} = DeclTL (Extern encore_type_t, AsLval $ runtime_type_name cname)
 
       method_fwds cdecl@(A.Class{A.cname, A.methods}) = map method_fwd methods
           where

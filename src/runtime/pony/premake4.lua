@@ -98,6 +98,7 @@ project "closure"
 
 project "encore"
   c_lib()
+  os.execute("dtrace -h -s ../encore/encore.d -o ../encore/encore_provider.h")
   files {
     "../encore/encore.h",
     "../encore/encore.c"

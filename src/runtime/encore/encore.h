@@ -12,9 +12,7 @@ typedef struct ctx_wrapper {
 
 #include <pony/pony.h>
 
-static pony_type_t *ENCORE_ACTIVE    = (pony_type_t *)1;
-static pony_type_t *ENCORE_PRIMITIVE = (pony_type_t *)NULL;
-
+typedef struct encore_type_t encore_type_t;
 typedef struct encore_actor encore_actor_t;
 typedef struct encore_oneway_msg encore_oneway_msg_t;
 typedef struct encore_fut_msg encore_fut_msg_t;
@@ -40,6 +38,15 @@ typedef enum {
   _ENC__MSG_RUN_CLOSURE,
   _ENC__MSG_MAIN,
 } encore_msg_id;
+
+struct encore_type_t 
+{
+  pony_type_t;
+  char *class_name;
+};
+
+static encore_type_t *ENCORE_ACTIVE    = (encore_type_t *)1;
+static encore_type_t *ENCORE_PRIMITIVE = (encore_type_t *)NULL;
 
 struct encore_oneway_msg
 {
@@ -72,13 +79,13 @@ struct encore_actor
 };
 
 /// Create a new Encore actor
-encore_actor_t *encore_create(pony_type_t *type);
+encore_actor_t *encore_create(encore_type_t *type);
 
 /// Allocate s bytes of memory, zeroed out
 void *encore_alloc(size_t s);
 
 /// The starting point of all Encore programs
-int encore_start(int argc, char** argv, pony_type_t *type);
+int encore_start(int argc, char** argv, encore_type_t *type);
 
 bool encore_actor_run_hook(encore_actor_t *actor);
 bool encore_actor_handle_message_hook(encore_actor_t *actor, pony_msg_t* msg);
