@@ -7,6 +7,9 @@
 #include <stdio.h>
 #include <assert.h>
 
+#include <encore.h>
+#include <encore_provider.h>
+
 typedef struct scheduler_t scheduler_t;
 
 __pony_spec_align__(
@@ -229,6 +232,9 @@ static pony_actor_t* request(scheduler_t* sched)
     __pony_atomic_compare_exchange_n(&sched->thief, &thief, NULL, false,
       PONY_ATOMIC_RELAXED, PONY_ATOMIC_RELAXED, intptr_t);
   }
+
+  ENCORE_ACTOR_SCHEDULED( (*(encore_type_t **)actor)->class_name,
+			  (*(encore_type_t **)actor)->id, sched->tid, sched->cpu );
 
   return actor;
 }

@@ -1,0 +1,49 @@
+embed
+#include <math.h>
+#include <assert.h>
+/* "Needed" by bitset */
+#define BITS_PER_ELEMENT  (sizeof(unsigned long) * 8)
+#define ONE               1UL
+#define mask(num)          (ONE << (num % BITS_PER_ELEMENT)) 
+#define element(bits, num) (((unsigned long *)bits)[num / BITS_PER_ELEMENT])
+end
+
+--
+-- Bitset
+--
+-- Simple wrapper around a bitset library.
+--
+passive class D
+passive class Bitset
+  data : D
+  size : int
+  capacity : int
+
+  def Bitset_trace() : void
+    embed void
+      pony_trace(this->data);
+    end
+
+  def init(size:int) : void
+    embed void
+      this->size = size;
+      this->data = encore_alloc(size / 8 + 1);
+      this->capacity = size;
+    end
+
+  def isset(index:int) : bool
+    embed bool
+      bool r = element(this->data, index) & mask(index);
+      !r;
+    end
+
+  def set(index:int) : void
+    embed void
+      element(this->data, index) &= ~mask(index); 
+    end
+
+  def unset(index:int) : void
+    embed void
+      assert(this->data);
+      element(this->data, index) |=  mask(index); 
+    end

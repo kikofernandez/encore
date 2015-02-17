@@ -1,0 +1,192 @@
+import lib
+
+class Reporter
+  primes:int
+  candidates:int
+  count:int
+
+  def init(c:int) : void
+    this.candidates = c  
+
+  def report(id:int, p:int, c:int) : void {
+    this.candidates = this.candidates - c;
+    this.primes = this.primes + p;
+    this.count = this.count + c;
+
+    -- print("<{}: {} rem {}>\n", id, c, this.count);
+
+    if this.candidates == 0 then print this.primes;
+  }
+
+
+class Filter
+  bitset:Bitset
+  start:int
+  stop:int
+  size:int
+  first:int
+  report:Reporter
+  adjust:int
+  left:Filter
+  right:Filter
+  id:int
+
+  def pow(n:int, to:int) : int 
+    if to == 0 then 1 else n * this.pow(n, to - 1)
+
+  def init(id:int, start:int, stop:int, report:Reporter, depth:int) : void {
+    let 
+      size          = (stop - start) / (this.pow(2, depth) - 1)
+      adjusted_size = if depth > 1 then ((size + 99) / 100 ) * 100 else stop - start
+    in
+      this.bitset = new Bitset(adjusted_size / 2);
+    this.start  = start;
+    this.stop   = start + this.bitset.size;
+    this.report = report;
+    this.adjust = if start % 2 == 0 then 1 else 0;
+    this.id     = id;
+    this.size   = this.bitset.size;
+
+    assertTrue(this.size > 0, "Rounding truncated actor");
+
+    -- print("new Filter({}, {}, {}, {})\n", this.id, this.start, this.stop + this.size, this.size);
+
+    if depth > 1 then 
+      let 
+	half  = ((((stop - this.stop + this.bitset.size) / 2) + 99) / 100 ) * 100
+      in 
+	{
+	  this.left  = new Filter(id+1,                    this.stop + this.size, stop - half, report, depth - 1);
+	  this.right = new Filter(id+this.pow(2, depth-1), stop - half,           stop,        report, depth - 1);
+        }
+  }
+
+  def calculate_offset(start:int, prime:int) : int 
+    let 
+      m = (prime * prime - start) / 2         -- smallest candidate to be considered
+      x = ((start / prime) + 1) * prime       -- first multiple of prime in range
+      y = if x % 2 == 1 then x else x + prime -- skip over even multiples
+      z = (y - start) / 2                     -- adjust for omitting even numbers
+    in
+      if m < z then z else m 
+
+  def cancel_one(prime:int) : void 
+    let 
+      stop = this.size
+      i    = this.calculate_offset(this.start, prime) 
+    in {
+      while i < stop
+        {
+          this.bitset.unset(i);
+          i = i + prime;
+        };
+    }
+
+  def found_prime(p:int) : void {
+    unless this.left == null then { this.left ! found_prime(p); this.right ! found_prime(p); };
+    this.cancel_one(p);
+  }
+
+  def root_done() : void {
+    unless this.left == null then { this.left ! root_done(); this.right ! root_done(); };
+    this.done();
+  }
+
+  def done() : void
+    let
+      i   = 0
+      j   = this.size  
+      num = this.start + 1
+      primes = 0
+    in 
+      {
+        while i < j
+          {
+            if this.bitset.isset(i) then primes = primes + 1;
+            i = i + 1;
+	    num = num + 2;
+          };
+        this.report ! report(this.id, primes, this.size * 2);
+      }
+
+
+class Main
+  array:Bitset
+
+  def round_up(i:int) : int
+    ((i + 99) / 100 ) * 100
+
+  def sqrt(i:int) : int
+    embed int sqrt(#{i}); end
+
+  def pow(n:int, to:int) : int 
+    if to == 0 then 1 else n * this.pow(n, to - 1)
+
+  def main_loop(num:int, idx:int, stop:int, seg:int, array:Bitset, root:Filter, guard:Reporter) : void 
+    let
+      halt   = if num + seg > stop then stop else num + seg
+      primes = 0
+    in {
+      while num < halt
+        {
+          if array.isset(idx) then {
+            primes = primes + 1;
+	    root ! found_prime(num);
+            let 
+              j = (num * num) / 2 - 1  
+            in 
+              while j < stop 
+                {
+                  array.unset(j);
+                  j = j + num;
+                };
+          };
+          num = num + 2;
+          idx = idx + 1;
+        };
+      guard ! report(-1, primes, 0);
+
+      if halt == stop then { root ! root_done(); guard ! report(-1, 0, stop*2); }
+                      else this ! main_loop(num, idx, stop, seg, array, root, guard);  
+    }
+
+  def main() : void 
+    let 
+      candidates = 1000 * embed int atoi(argv[1]); end
+      depth      = embed int atoi(argv[2]); end
+      stop       = this.round_up(this.sqrt(candidates))
+      array      = new Bitset(stop / 2)
+      guard      = new Reporter(candidates)
+      num        = 3
+      idx        = 0
+      primes     = 1
+      root       = new Filter(1, stop, candidates, guard, depth)
+    in {
+      print("Finding all primes in 2..{} using {} actors\n", candidates, this.pow(2, depth) - 1);
+      this.array = array;
+      assertTrue((this.pow(2, depth) - 1) * 100 - stop <= candidates);
+      this ! main_loop(num, idx, stop/2, 1024, array, root, guard);
+      guard ! report(-1, 1, 0);
+
+      {-
+      while num < stop
+        {
+          if array.isset(idx) then {
+            primes = primes + 1;
+      	    root ! found_prime(num);
+            let 
+              j = (num * num) / 2 - 1  
+            in 
+              while j < stop / 2 
+                {
+                  array.unset(j);
+                  j = j + num;
+                };
+          };
+          num = num + 2;
+          idx = idx + 1;
+        };
+      guard ! report(-1, primes, stop);
+      root ! root_done();
+      -}
+    }
