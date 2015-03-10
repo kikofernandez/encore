@@ -21,8 +21,13 @@ import qualified Types as Ty
 import Control.Monad.State hiding (void)
 import Data.List
 
-encore_message_send sender receiver msg =
-  Statement $ Call (Nam "ENCORE_MESSAGE_SEND") [Null, current_this, Null, receiver, Null, msg]
+encore_message_send sender receiver r msg =
+  Statement $ Call (Nam "ENCORE_MESSAGE_SEND") [Embed $ "\"RTTI not yet implemented\"", 
+                                                current_this, 
+                                                String $ show (A.getType r), 
+                                                receiver, 
+                                                String $ show msg, 
+                                                AsExpr . AsLval $ one_way_msg_id (A.getType r) msg]
 
 current_this =
   Call (Nam "actor_current") ([] :: [CCode Expr])
