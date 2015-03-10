@@ -35,6 +35,7 @@ generate_header A.Program{A.etl = A.EmbedTL{A.etlheader}, A.functions, A.classes
          "array.h",
          "future.h",
          "string.h",
+         "encore_provider.h",
          "stdio.h"
         ]) :
        HashDefine "UNIT ((void*) -1)" :

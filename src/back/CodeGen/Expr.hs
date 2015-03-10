@@ -4,6 +4,7 @@
 
 module CodeGen.Expr () where
 
+import CodeGen.DTrace
 import CodeGen.Typeclasses
 import CodeGen.CCodeNames
 import CodeGen.Type
@@ -348,6 +349,7 @@ instance Translatable A.Expr (State Ctx.Context (CCode Lval, CCode Stat)) where
                                 arg_decls ++
                                 the_msg_decl :
                                 the_arg_init :
+                                encore_message_send ttarg ttarg the_msg_name : 
                                 gc_send args_types (Comm "Not tracing the future in a one_way send") ++
                                 [Statement the_call]))
 
@@ -552,3 +554,4 @@ tracefun_call (a, t)
 -- Note: the 2 is for the 16 bytes of payload in pony_msg_t
 -- If the size of this struct changes, so must this calculation
 calc_pool_size_for_msg args = (args + 2) `div` 8
+

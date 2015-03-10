@@ -39,6 +39,7 @@ $(LIB_DIR):
 	mkdir -p $(LIB_DIR)
 
 PLATFORM_INC=$(RUNTIME_DIR)/pony/inc/platform
+DTRACE_INC=$(RUNTIME_DIR)/encore/encore_provider.h
 PONY_INC=$(RUNTIME_DIR)/pony/inc/pony
 PONY_LIB=$(RUNTIME_DIR)/pony/bin/$(CONFIG)/libpony.a
 FUTURE_INC=$(FUTURE_DIR)/future.h
@@ -69,6 +70,7 @@ pony: dirs $(PONY_INC)
 	cp -r $(CLOSURE_LIB) $(LIB_DIR)
 	cp -r $(ENCORE_LIB) $(LIB_DIR)
 	cp -r $(STREAM_LIB) $(LIB_DIR)
+	cp $(DTRACE_INC) $(INC_DIR)
 
 	# cp -r $(SET_LIB) $(LIB_DIR)
 	cp -r $(ARRAY_LIB) $(LIB_DIR)
