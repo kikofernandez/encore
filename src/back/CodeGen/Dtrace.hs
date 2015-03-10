@@ -21,5 +21,11 @@ import qualified Types as Ty
 import Control.Monad.State hiding (void)
 import Data.List
 
-encore_message_send sender reciever msg =
-  Statement $ Call (Nam "ENCORE_MESSAGE_SEND") [Null, Int 0, Null, Int 0, Null, Int 0]
+encore_message_send sender receiver msg =
+  Statement $ Call (Nam "ENCORE_MESSAGE_SEND") [Null, current_this, Null, receiver, Null, msg]
+
+current_this =
+  Call (Nam "actor_current") ([] :: [CCode Expr])
+
+
+

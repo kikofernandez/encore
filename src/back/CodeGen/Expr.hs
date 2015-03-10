@@ -349,7 +349,7 @@ instance Translatable A.Expr (State Ctx.Context (CCode Lval, CCode Stat)) where
                                 arg_decls ++
                                 the_msg_decl :
                                 the_arg_init :
-                                encore_message_send ttarg ttarg the_msg_name : 
+                                encore_message_send ttarg (Cast (Ptr pony_actor_t) ntarg) (AsExpr . AsLval $ one_way_msg_id (A.getType target) name) : 
                                 gc_send args_types (Comm "Not tracing the future in a one_way send") ++
                                 [Statement the_call]))
 
