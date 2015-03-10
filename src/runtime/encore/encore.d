@@ -38,4 +38,28 @@ provider encore {
    */
   probe actor_scheduled(char *class_name, uint32_t id, 
 			void *thread_id, uint32_t cpu);
+
+  /*
+   * Message send probe.
+   * Fires when an actor sends a message to another actor.
+   *
+   * Emits:
+   *   send_name : sending actor class name
+   *   send_id   : sending actor id
+   *   recv_name : receiving actor class name
+   *   recv_id   : receiving actor id
+   *   msg_name  : message name
+   *   msg_id    : message id
+   *
+   * Examples:
+   *
+   * Macro:
+   *   ENCORE_MESSAGE_SEND( type->class_name, type->id,
+   *                        recv->class_name, recv->id,
+   *                        msg->name, msg->id )
+   */
+  probe message_send(char *send_name, uint32_t send_id,
+		     char *recv_name, uint32_t recv_id,
+		     char *msg_name, uint32_t msg_id );
+
 };
