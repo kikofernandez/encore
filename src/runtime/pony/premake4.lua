@@ -30,6 +30,7 @@ solution "ponyrt"
 
   configuration "not windows"
     buildoptions {
+      "-Wno-microsoft",
       "-mcx16",
       "-pthread",
       "-std=gnu11",
@@ -99,6 +100,10 @@ project "closure"
 project "encore"
   os.execute("dtrace -h -s ../encore/encore.d -o ../encore/encore_provider.h")
   c_lib()
+  buildoptions {
+      "-Wno-deprecated-declarations",
+      "-Wno-microsoft",
+  }
   files {
     "../encore/encore.h",
     "../encore/encore.c"
