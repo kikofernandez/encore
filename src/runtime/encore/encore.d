@@ -50,16 +50,31 @@ provider encore {
    *   recv_id   : receiving actor id
    *   msg_name  : message name
    *   msg_id    : message id
+   *   payload   : message arguments
    *
    * Examples:
    *
    * Macro:
    *   ENCORE_MESSAGE_SEND( type->class_name, type->id,
    *                        recv->class_name, recv->id,
-   *                        msg->name, msg->id )
+   *                        msg->name, msg->id, payload )
    */
   probe message_send(char *send_name, uint32_t send_id,
 		     char *recv_name, uint32_t recv_id,
-		     char *msg_name, uint32_t msg_id );
+		     char *msg_name, uint32_t msg_id,
+		     void * payload);
 
+  /*
+   * Actor probes
+   *
+   * Probes:
+   *
+   *    encore$target:<exec name>:<actor name>$id:created
+   *    encore$target:<exec name>:<actor name>$id:scheduled
+   *    encore$target:<exec name>:<actor name>$id:<msg>:send
+   *    encore$target:<exec name>:<actor name>$id:<msg>:receive
+   *    encore$target:<exec name>:<actor name>$id:gc:start
+   *    encore$target:<exec name>:<actor name>$id:gc:stop
+   *
+   */
 };
