@@ -32,6 +32,7 @@ import AST.Desugarer
 import ModuleExpander
 import Typechecker.Prechecker
 import Typechecker.Typechecker
+import Typechecker.Capturechecker
 import Optimizer.Optimizer
 import CodeGen.Main
 import CodeGen.ClassDecl
@@ -234,9 +235,9 @@ main =
        showWarnings precheckingWarnings
 
        verbatim options "== Typechecking =="
-       (typecheckedAST, typecheckingWarnings) <-
+       (typecheckedAST, typecheckingWarnings, env) <-
            case typecheckEncoreProgram precheckedAST of
-             (Right ast, warnings)  -> return (ast, warnings)
+             (Right (ast, env), warnings) -> return (ast, warnings, env)
              (Left error, warnings) -> do
                showWarnings warnings
                abort $ show error
@@ -247,8 +248,14 @@ main =
          withFile (changeFileExt sourceName "TAST") WriteMode
                   (flip hPrint $ show typecheckedAST)
 
+       capturecheckedAST <- case capturecheckEncoreProgram typecheckedAST env of
+                              Right ast  -> return ast
+                              Left error -> abort $ show error
+
+       verbatim options "== Capturechecking =="
+
        verbatim options "== Optimizing =="
-       let optimizedAST = optimizeProgram typecheckedAST
+       let optimizedAST = optimizeProgram capturecheckedAST
 
        verbatim options "== Generating code =="
        exeName <- compileProgram optimizedAST sourceName options

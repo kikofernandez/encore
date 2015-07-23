@@ -3,6 +3,7 @@
 -}
 
 module Typechecker.Util(TypecheckM
+                       ,CapturecheckM
                        ,whenM
                        ,anyM
                        ,unlessM
@@ -25,17 +26,17 @@ import Identifiers
 import Types as Ty
 import AST.AST as AST
 import Data.List
+import Data.Maybe
 import Text.Printf (printf)
 import Debug.Trace
-
--- Module dependencies
-import Typechecker.TypeError
-import Typechecker.Environment
 import Control.Monad.Reader
 import Control.Monad.Except
 import Control.Arrow(second)
 import Control.Monad.State
-import Data.Maybe
+
+-- Module dependencies
+import Typechecker.TypeError
+import Typechecker.Environment
 
 -- Monadic versions of common functions
 anyM :: (Monad m) => (a -> m Bool) -> [a] -> m Bool
@@ -58,6 +59,9 @@ type TypecheckM a =
                 MonadError TCError m,
                 MonadReader Environment m) => m a
 
+type CapturecheckM a =
+    forall m . (MonadError CCError m, MonadReader Environment m) => m a
+
 -- | convenience function for throwing an exception with the
 -- current backtrace
 tcError msg =
@@ -76,8 +80,8 @@ matchTypeParameterLength ty1 ty2 = do
       params2 = getTypeParameters ty2
   unless (length params1 == length params2) $
     tcError $ printf "'%s' expects %d type arguments, but '%s' has %d"
-              (show ty1) (length params1)
-              (show ty2) (length params2)
+              (showWithoutMode ty1) (length params1)
+              (showWithoutMode ty2) (length params2)
 
 -- | @resolveType ty@ checks all the components of @ty@, resolving
 -- reference types to traits or classes and making sure that any
@@ -93,16 +97,18 @@ resolveSingleType ty
              tcError $ "Free type variables in type '" ++ show ty ++ "'"
       return ty
   | isRefType ty = do
-      res <- resolveRefType ty
+      (res, formal) <- resolveRefType ty
       if isTypeSynonym res
       then resolveType res -- Force unfolding of type synonyms
-      else return res
+      else resolveMode res formal
   | isCapabilityType ty =
       resolveCapa ty
   | isStringType ty = do
       tcWarning StringDeprecatedWarning
       return ty
   | isTypeSynonym ty = do
+      unless (isModeless ty) $
+        tcError "Type synonyms can not have modes"
       let unfolded = unfoldTypeSynonyms ty
       resolveType unfolded
   | otherwise = return ty
@@ -117,6 +123,7 @@ resolveSingleType ty
           | otherwise =
               tcError $ "Cannot form capability with " ++ Ty.showWithKind t
 
+resolveTypeAndCheckForLoops :: Type -> TypecheckM Type
 resolveTypeAndCheckForLoops ty =
   evalStateT (typeMapM resolveAndCheck ty) []
   where
@@ -127,14 +134,14 @@ resolveTypeAndCheckForLoops ty =
           when (tyid `elem` seen) $
             lift $ tcError $ "Type synonyms cannot be recursive." ++
                              " One of the culprits is " ++ tyid
-          res <- lift $ resolveRefType ty
+          (res, formal) <- lift $ resolveRefType ty
           when (isTypeSynonym res) $ put (tyid : seen)
           if isTypeSynonym res
           then typeMapM resolveAndCheck res
-          else return res
+          else lift $ resolveMode res formal
       | otherwise = lift $ resolveType ty
 
-resolveRefType :: Type -> TypecheckM Type
+resolveRefType :: Type -> TypecheckM (Type, Type)
 resolveRefType ty
   | isRefType ty = do
       result <- asks $ refTypeLookup ty
@@ -142,10 +149,29 @@ resolveRefType ty
         Just formal -> do
           matchTypeParameterLength formal ty
           let res = formal `setTypeParameters` getTypeParameters ty
-          return res
+                           `withModeOf` ty
+          return (res, formal)
         Nothing ->
           tcError $ "Couldn't find class, trait or typedef '" ++ show ty ++ "'"
   | otherwise = error $ "Util.hs: " ++ Ty.showWithKind ty ++ " isn't a ref-type"
+
+resolveMode :: Type -> Type -> TypecheckM Type
+resolveMode actual formal
+  | isModeless actual && not (isModeless formal) =
+      resolveMode (actual `withModeOf` formal) formal
+  | isClassType actual = do
+      unless (isModeless actual) $
+             tcError "Class types can not have modes"
+      return actual
+  | isTraitType actual = do
+      when (isModeless actual) $
+           tcError $ "No mode given to " ++ classOrTraitName actual
+      unless (isModeless formal || actual `modeSubtypeOf` formal) $
+           tcError $ "Cannot override mode of " ++
+                     Ty.showWithKind formal
+      return actual
+  | otherwise =
+      error $ "Util.hs: Cannot resolve unknown reftype: " ++ show formal
 
 subtypeOf :: Type -> Type -> TypecheckM Bool
 subtypeOf ty1 ty2
@@ -176,7 +202,8 @@ subtypeOf ty1 ty2
       results <- zipWithM subtypeOf argTys1 argTys2
       return $ and results && length argTys1 == length argTys2
     | isTraitType ty1 && isTraitType ty2 =
-        ty1 `refSubtypeOf` ty2
+        liftM (ty1 `modeSubtypeOf` ty2 &&)
+              (ty1 `refSubtypeOf` ty2)
     | isTraitType ty1 && isCapabilityType ty2 = do
         let traits = typesFromCapability ty2
         allM (ty1 `subtypeOf`) traits
@@ -266,7 +293,7 @@ findMethodWithCalledType ty name = do
     noMethod (Name "_init") = "No constructor"
     noMethod n = concat ["No method '", show n, "'"]
 
-findCapability :: Type -> TypecheckM Type
+findCapability :: (MonadReader Environment m) => Type -> m Type
 findCapability ty = do
   result <- asks $ capabilityLookup ty
   return $ fromMaybe err result

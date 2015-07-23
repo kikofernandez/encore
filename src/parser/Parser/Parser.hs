@@ -23,7 +23,7 @@ import Control.Applicative ((<$>))
 import Identifiers
 import Types hiding(refType)
 import AST.AST
-import AST.Meta hiding(Closure, Async)
+import AST.Meta hiding(Closure, Async, getPos)
 
 -- | 'parseEncoreProgram' @path@ @code@ assumes @path@ is the path
 -- to the file being parsed and will produce an AST for @code@,
@@ -104,6 +104,9 @@ lexer =
     ,"extract"
     ,"each"
     ,"typedef"
+    ,"linear"
+    ,"consume"
+    ,"unsafe"
    ],
    P.reservedOpNames = [
      ":"
@@ -217,10 +220,11 @@ typ = buildExpressionParser opTable singleType
         reserved "Range"
         return rangeType
       refType = do
+        mode <- option id mode
         notFollowedBy lower
         refId <- identifier
         parameters <- option [] $ angles (commaSep1 typ)
-        return $ refTypeWithParams refId parameters
+        return $ mode $ refTypeWithParams refId parameters
       primitive =
         do {reserved "int"; return intType} <|>
         do {reserved "bool"; return boolType} <|>
@@ -255,7 +259,7 @@ program = do
   bundle <- bundledecl
   imports <- many importdecl
   etl <- embedTL
-  decls <- many $ (CDecl <$> classDecl) <|> (TDecl <$> traitDecl) <|> (TDef <$> typedef) <|> (FDecl <$> function) 
+  decls <- many $ (CDecl <$> classDecl) <|> (TDecl <$> traitDecl) <|> (TDef <$> typedef) <|> (FDecl <$> function)
   let (classes, traits, typedefs, functions) = partitionDecls decls
   eof
   return Program{source, bundle, etl, imports, typedefs, functions, traits, classes}
@@ -285,16 +289,19 @@ importdecl = do
 embedTL :: Parser EmbedTL
 embedTL = do
   pos <- getPosition
-  (try (do string "embed"
-           header <- manyTill anyChar $ try $ do {space; string "body"}
-           code <- manyTill anyChar $ try $ do {space; reserved "end"}
-           return $ EmbedTL (meta pos) header code
-       ) <|>
-   try (do string "embed"
-           header <- manyTill anyChar $ try $ do {space; reserved "end"}
-           return $ EmbedTL (meta pos) header ""
-       ) <|>
-   (return $ EmbedTL (meta pos) "" ""))
+  try (embedWithBody pos) <|>
+      try (embedWithoutBody pos) <|>
+      return (EmbedTL (meta pos) "" "")
+    where
+      embedWithBody pos = do
+            string "embed"
+            header <- manyTill anyChar $ try $ do {space; string "body"}
+            code <- manyTill anyChar $ try $ do {space; reserved "end"}
+            return $ EmbedTL (meta pos) header code
+      embedWithoutBody pos = do
+            string "embed"
+            header <- manyTill anyChar $ try $ do {space; reserved "end"}
+            return $ EmbedTL (meta pos) header ""
 
 typedef :: Parser Typedef
 typedef = do
@@ -377,16 +384,28 @@ function =  try regularFunction <|> matchingFunction
           funbody <- expression
           return (funheader, funbody)
 
+mode :: Parser (Type -> Type)
+mode = linear
+       <|>
+       unsafe
+       <?> "mode"
+    where
+      linear = do reserved "linear"
+                  return makeLinear
+      unsafe = do reserved "unsafe"
+                  return makeUnsafe
+
 traitDecl :: Parser TraitDecl
 traitDecl = do
   tmeta <- meta <$> getPosition
+  mode <- option id mode
   reserved "trait"
   ident <- identifier
   params <- option [] (angles $ commaSep1 typeVariable)
   (treqs, tmethods) <- maybeBraces traitBody
   return Trait{tmeta
-              ,tname = traitTypeFromRefType $
-                       refTypeWithParams ident params
+              ,tname = mode $
+                       traitType ident params
               ,treqs
               ,tmethods
               }
@@ -537,6 +556,7 @@ expression = buildExpressionParser opTable highOrderExpr
                  [textualOperator "and" Identifiers.AND,
                   textualOperator "or" Identifiers.OR],
                  [messageSend],
+                 [consume],
                  [partyLiftf, partyLiftv, partyEach],
                  [typedExpression],
                  [chain],
@@ -563,6 +583,11 @@ expression = buildExpressionParser opTable highOrderExpr
                     reservedOp s
                     return (Binop (meta pos) binop)) AssocLeft
 
+      consume =
+          Prefix (do pos <- getPosition
+                     reserved "consume"
+                     return (Consume (meta pos)))
+
       typedExpression =
           Postfix (do pos <- getPosition
                       reservedOp ":"
@@ -572,13 +597,13 @@ expression = buildExpressionParser opTable highOrderExpr
           Postfix (try (do pos <- getPosition
                            index <- brackets expression
                            return (\e -> ArrayAccess (meta pos) e index)))
+
       messageSend =
-          Postfix (do pos <- getPosition
-                      bang
+          Postfix (do bang
                       name <- identifier
                       args <- parens arguments
-                      return (\target -> MessageSend (meta pos) target
-                                                     (Name name) args))
+                      return (\target -> MessageSend (meta (getPos target))
+                                                     target (Name name) args))
       chain =
           Infix (do pos <- getPosition ;
                     reservedOp "~~>" ;
