@@ -116,12 +116,12 @@ resolveSingleType ty
     resolveCapa t =
         mapM_ resolveSingleTrait (typesFromCapability t) >> return t
     resolveSingleTrait t
-          | isRefType t = do
-              result <- asks $ traitLookup t
-              when (isNothing result) $
-                 tcError $ "Couldn't find trait '" ++ getId t ++ "'"
-          | otherwise =
-              tcError $ "Cannot form capability with " ++ Ty.showWithKind t
+      | isRefType t = do
+          result <- asks $ traitLookup t
+          when (isNothing result) $
+             tcError $ "Couldn't find trait '" ++ getId t ++ "'"
+      | otherwise =
+          tcError $ "Cannot form capability with " ++ Ty.showWithKind t
 
 resolveTypeAndCheckForLoops :: Type -> TypecheckM Type
 resolveTypeAndCheckForLoops ty =
@@ -150,6 +150,7 @@ resolveRefType ty
           matchTypeParameterLength formal ty
           let res = formal `setTypeParameters` getTypeParameters ty
                            `withModeOf` ty
+                           `withBoxOf` ty
           return (res, formal)
         Nothing ->
           tcError $ "Couldn't find class, trait or typedef '" ++ show ty ++ "'"

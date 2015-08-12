@@ -248,11 +248,11 @@ main =
          withFile (changeFileExt sourceName "TAST") WriteMode
                   (flip hPrint $ show typecheckedAST)
 
+       verbatim options "== Capturechecking =="
+
        capturecheckedAST <- case capturecheckEncoreProgram typecheckedAST env of
                               Right ast  -> return ast
                               Left error -> abort $ show error
-
-       verbatim options "== Capturechecking =="
 
        verbatim options "== Optimizing =="
        let optimizedAST = optimizeProgram capturecheckedAST

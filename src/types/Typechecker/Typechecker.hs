@@ -21,7 +21,7 @@ import Identifiers
 import AST.AST hiding (hasType, getType)
 import qualified AST.AST as AST (getType)
 import AST.PrettyPrinter
-import Types
+import Types as Ty
 import Typechecker.Environment
 import Typechecker.TypeError
 import Typechecker.Util
@@ -37,12 +37,6 @@ typecheckEncoreProgram p =
         (Right p', warnings') -> (return (p', env), warnings')
         (Left err, warnings') -> (Left err, warnings')
     (Left err, warnings) -> (Left err, warnings)
-
--- typecheckEncoreProgram :: Program -> Either TCError (Program, Environment)
--- typecheckEncoreProgram p =
---     do env <- buildEnvironment p
---        p' <- runReader (runExceptT (doTypecheck p)) env
---        return (p', env)
 
 -- | The actual typechecking is done using a Reader monad wrapped
 -- in an Error monad. The Reader monad lets us do lookups in the
@@ -486,7 +480,8 @@ instance Checkable Expr where
       (eArgs, bindings) <- matchArguments args expectedTypes
       let resultType = replaceTypeVars bindings mType
           returnType = retType calledType header resultType
-      return $ setType returnType mcall {target = specializedTarget
+      return $ setArrowType (arrowType expectedTypes mType) $
+               setType returnType mcall {target = specializedTarget
                                         ,args = eArgs}
       where
         retType targetType header t
@@ -516,7 +511,8 @@ instance Checkable Expr where
       matchArgumentLength targetType header args
       let expectedTypes = map ptype (hparams header)
       (eArgs, _) <- matchArguments args expectedTypes
-      return $ setType voidType msend {target = eTarget, args = eArgs}
+      return $ setArrowType (arrowType expectedTypes voidType) $
+               setType voidType msend {target = eTarget, args = eArgs}
 
     doTypecheck maybeData@(MaybeValue {mdt}) = do
       eBody <- maybeTypecheck mdt
@@ -559,7 +555,8 @@ instance Checkable Expr where
                        show (length args)
       (eArgs, bindings) <- matchArguments args argTypes
       let resultType = replaceTypeVars bindings (getResultType ty)
-      return $ setType resultType fcall {args = eArgs}
+      return $ setArrowType ty $
+               setType resultType fcall {args = eArgs}
 
    ---  |- t1 .. |- tn
     --  E, x1 : t1, .., xn : tn |- body : t
@@ -739,7 +736,8 @@ instance Checkable Expr where
               extractedType = getResultType hType
           eArg <- checkPattern arg extractedType
           matchArgumentLength argty header []
-          return $ setType extractedType pattern {args = [eArg]}
+          return $ setArrowType (arrowType [] hType) $
+                   setType extractedType pattern {args = [eArg]}
 
         doCheckPattern pattern@(FunctionCall {name, args}) argty = do
           let tupMeta = getMeta $ head args
@@ -901,7 +899,7 @@ instance Checkable Expr where
       let targetType = AST.getType eTarget
       unless (isThisAccess target || isPassiveClassType targetType) $
         tcError $ "Cannot read field of expression '" ++
-          show (ppSugared target) ++ "' of " ++ Types.showWithKind targetType
+          show (ppSugared target) ++ "' of " ++ Ty.showWithKind targetType
       fdecl <- findField targetType name
       let ty = ftype fdecl
       return $ setType ty fAcc {target = eTarget}
@@ -963,6 +961,8 @@ instance Checkable Expr where
            whenM (isGlobalVar target) $
                  tcError $ "Can't consume global variable '" ++
                            show (ppExpr target) ++ "'"
+           when (isThisAccess target) $
+                tcError "Variable 'this' cannot be consumed"
            let ty = AST.getType eTarget
            return $ setType ty cons {target = eTarget}
         where
