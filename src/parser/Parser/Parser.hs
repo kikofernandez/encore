@@ -104,7 +104,6 @@ lexer =
     ,"extract"
     ,"each"
     ,"typedef"
-    ,"read"
     ,"unsafe"
     ,"linear"
     ,"consume"
@@ -388,22 +387,14 @@ function =  try regularFunction <|> matchingFunction
           return (funheader, funbody)
 
 mode :: Parser (Type -> Type)
-mode = linear
+mode = (reserved "linear" >> return makeLinear)
        <|>
-       unsafe
+       (reserved "unsafe" >> return makeUnsafe)
        <|>
-       read
+       (reserved "read" >> return makeRead)
+       <|>
+       (reserved "subord" >> return makeSubordinate)
        <?> "mode"
-    where
-      linear = do
-        reserved "linear"
-        return makeLinear
-      unsafe = do
-        reserved "unsafe"
-        return makeUnsafe
-      read = do
-        reserved "read"
-        return makeRead
 
 traitDecl :: Parser TraitDecl
 traitDecl = do

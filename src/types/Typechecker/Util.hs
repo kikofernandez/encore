@@ -20,6 +20,8 @@ module Typechecker.Util(TypecheckM
                        ,findMethodWithCalledType
                        ,findCapability
                        ,propagateResultType
+                       ,isSubordinateType
+                       ,isEncapsulatedType
                        ) where
 
 import Identifiers
@@ -298,8 +300,8 @@ findMethodWithCalledType ty name = do
     concat [noMethod name, " in ", classOrTraitName ty]
   return $ fromJust result
   where
-    noMethod (Name "_init") = "No constructor"
-    noMethod n = concat ["No method '", show n, "'"]
+    noMethod n | n == constructorName = "No constructor"
+               | otherwise = concat ["No method '", show n, "'"]
 
 findCapability :: (MonadReader Environment m) => Type -> m Type
 findCapability ty = do
@@ -340,3 +342,31 @@ propagateResultType ty e
 
       propagateMatchClause mc@MatchClause{mchandler} =
           mc{mchandler = propagateResultType ty mchandler}
+
+isSubordinateType :: Type -> TypecheckM Bool
+isSubordinateType ty
+    | isCompositeType ty
+    , traits <- typesFromCapability ty
+      = anyM isSubordinateType traits
+    | isPassiveClassType ty = do
+        capability <- findCapability ty
+        isSubordinateType capability
+    | hasResultType ty =
+        isSubordinateType (getResultType ty)
+    | isTupleType ty =
+        anyM isSubordinateType (getArgTypes ty)
+    | otherwise = return $ isSubordinateRefType ty
+
+isEncapsulatedType :: Type -> TypecheckM Bool
+isEncapsulatedType ty
+    | isCompositeType ty
+    , traits <- typesFromCapability ty
+      = allM isSubordinateType traits
+    | isPassiveClassType ty = do
+        capability <- findCapability ty
+        isEncapsulatedType capability
+    | hasResultType ty =
+        isEncapsulatedType (getResultType ty)
+    | isTupleType ty =
+        allM isEncapsulatedType (getArgTypes ty)
+    | otherwise = return $ isSubordinateRefType ty

@@ -470,7 +470,6 @@ instance Translatable A.Expr (State Ctx.Context (CCode Lval, CCode Stat)) where
     | Ty.isSharedClassType ty = delegateUse callTheMethodOneway
     | otherwise = delegateUse callTheMethodSync
     where
-      initName = ID.Name "_init"
       delegateUse methodCall =
         let
           fName = constructorImplName ty
@@ -482,7 +481,7 @@ instance Translatable A.Expr (State Ctx.Context (CCode Lval, CCode Stat)) where
             typeArgs <- mapM getTypeVar typeParams
             (nnew, ctorCall) <- namedTmpVar "new" ty callCtor
             (initArgs, result) <-
-              methodCall nnew ty initName args ty
+              methodCall nnew ty ID.constructorName args ty
             return (nnew,
               Seq $
                 [ctorCall] ++
@@ -1122,8 +1121,12 @@ closureCall clos fcall@A.FunctionCall{A.name, A.args} = do
 globalFunctionCall :: A.Expr -> State Ctx.Context (CCode Lval, CCode Stat)
 globalFunctionCall fcall@A.FunctionCall{A.name, A.args} = do
   (args', initArgs) <- fmap unzip $ mapM translate args
+  let functionType = A.getArrowType fcall
+      expectedTypes = Ty.getArgTypes functionType
+      actualTypes = map A.getType args
+      castedArguments = zipWith3 castArguments expectedTypes args' actualTypes
   (callVar, call) <- namedTmpVar "global_f" typ $
-    Call (globalFunctionName name) (encoreCtxVar:args')
+    Call (globalFunctionName name) (AsExpr encoreCtxVar:castedArguments)
   let ret = if Ty.isVoidType typ then unit else callVar
   return $ (ret, Seq $ initArgs ++ [call])
   where
