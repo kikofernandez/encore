@@ -155,11 +155,16 @@ instance Precheckable FieldDecl where
       ftype' <- resolveType ftype
       thisType <- liftM fromJust . asks . varLookup $ thisName
       when (isReadRefType thisType) $ do
-           unless (isValField f) $
-                  tcError "Read traits can only have val fields"
-           unless (isSafeType ftype') $
-                  tcError $ "Read trait can not have field of non-safe type '" ++
-                            show ftype' ++ "'"
+        unless (isValField f) $
+          tcError "Read traits can only have val fields"
+        unless (isSafeType ftype') $
+          tcError $ "Read trait can not have field of non-safe type '" ++
+                    show ftype' ++ "'"
+      isThreadField <- isThreadType ftype'
+      isThreadThis <- isThreadType thisType
+      when (isThreadField && isTraitType thisType) $
+        unless isThreadThis $
+          tcError "Traits must have manifest thread mode to have thread fields"
       return $ setType ftype' f
 
 instance Precheckable MethodDecl where
