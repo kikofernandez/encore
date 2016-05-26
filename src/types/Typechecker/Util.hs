@@ -173,15 +173,10 @@ resolveMode actual formal
       when (isModeless actual) $
            tcError $ "No mode given to " ++ classOrTraitName actual
       unless (isModeless formal || actual `modeSubtypeOf` formal) $
-           tcError $ "Cannot override mode of " ++
-                     Ty.showWithKind formal
-      when (isReadRefType actual) $ do
-           tdecl <- liftM fromJust . asks $ traitLookup actual
-           unless (isReadRefType formal ||
-                   all isSafeValField (requiredFields tdecl)) $
-                  tcError $ "Cannot give read mode to " ++
-                            classOrTraitName actual ++
-                            ". It has fields that are not val and safe"
+             tcError $ "Cannot override mode of " ++ Ty.showWithKind formal
+      when (isReadRefType actual) $
+           unless (isReadRefType formal) $
+                  tcError "Read mode must be manifestly set"
       return actual
   | otherwise =
       error $ "Util.hs: Cannot resolve unknown reftype: " ++ show formal
