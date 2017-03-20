@@ -1,0 +1,53 @@
+module ParTTransformer (
+    arrT,
+    infiniteLoop)
+
+import ParT.ParT
+import ParT.Arrow as A
+
+typedef TArrow[a, b] = Par[a -> (b, Par[a -> b])]
+
+
+fun arrT[a, b](fn: Par[a -> b]): Par[a -> (Par[b], Par[a -> Par[b]])] --Par[a -> (Par[b], Par[a -> Par[b]])]
+  val clos = fun (x: a) => runArrow(x, fn) -- :: a -> Par[b]
+  val container = fun (y: a) => (clos(y), liftv(clos))  -- :: a -> (Par[b], a -> Par[b])
+  liftv(container)  -- Par[a -> (Par[b], a -> Par[b])]
+end
+
+-- local private function
+fun transformerFun[a, b](p: Par[a -> Par[b]]): Par[a -> (Par[b], Par[a -> Par[b]])]
+  liftv(fun (x: a) => (join(runArrow(x, p)), p))
+end
+
+
+fun inc(x: int): int
+  val sum = x + 1
+  println(sum)
+  sum
+end
+
+fun infiniteLoop[a, b](streamTransformer: Par[a -> (Par[b], Par[a -> Par[b]])],
+                       conversor: b -> a,
+                       initData: Par[a]): unit
+  val p = runParArrow(initData, streamTransformer) -- :: Par[(Par[b], Par[a -> Par[b]])]
+  p >> (fun (tuple: (Par[b], Par[a -> Par[b]]))
+          val result = tuple.0
+          val transformer = tuple.1
+
+          val backToA = result >> conversor -- :: Par[a]
+          val streamTransformer' = transformerFun(transformer)
+          infiniteLoop(streamTransformer', conversor, backToA)
+        end)
+end
+
+fun idInt(x: int): int
+  x
+end
+
+class Main
+  def main(): unit
+    val arrow = A.arr(inc)
+    val transformer = arrT(arrow)
+    infiniteLoop(transformer, idInt, liftv(3))
+  end
+end
