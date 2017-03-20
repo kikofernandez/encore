@@ -35,7 +35,7 @@ end
 fun cccc[a, b, c](p1: PArrow[a, Par[b]], p2: PArrow[b, Par[c]]): unit
   -- TODO: Solve this function
   p2 >> (fun (fn: b -> Par[c])
-           val clos = fun (pb: Par[b] -> Par[c]) => bind(fn, pb)
-           A.compose(p1, clos) -- Par[a -> Par[b]] -> Par[b -> Par[c]]
+           val clos = fun (pb: Par[b]) => bind(fn, pb)
+           A.compose(p1, liftv(clos)) -- Par[a -> Par[b]] -> Par[b -> Par[c]]
          end)
 end
