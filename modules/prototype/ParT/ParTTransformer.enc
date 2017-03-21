@@ -21,22 +21,22 @@ end
 -- Transformer[a, b] = PArrow[a, (Par[b], Par [a -> Par[b]])]
 -- Transformer[b, c] = PArrow[b, (Par[c], Par [b -> Par[c]])]
 -- Transformer[a, c] = PArrow[a, (Par[c], Par [a -> Par[c]])]
-fun compose[a, b, c](t1: Transformer[a, b], t2: Transformer[b, c]): PArrow[a, Par[(Par[c], Par [b -> Par[c]])]]
-  val transformer = fun (x: a)
-                      val pTuple = runArrow(x, t1) -- Par[(Par[b], Par [a -> Par[b]])]
-                      bind(fun (tuple: (Par[b], Par [a -> Par[b]]))
-                             val pb = tuple.0
-                             bind(fun (x: b) => runArrow(x, t2), pb) -- Par[(Par[c], Par [b -> Par[c]])]
-                           end, pTuple)
-                    end
-  liftv(transformer)
-end
+-- fun compose[a, b, c](t1: Transformer[a, b], t2: Transformer[b, c]): PArrow[a, Par[(Par[c], Par [b -> Par[c]])]]
+--   val transformer = fun (x: a)
+--                       val pTuple = runArrow(x, t1) -- Par[(Par[b], Par [a -> Par[b]])]
+--                       bind(fun (tuple: (Par[b], Par [a -> Par[b]]))
+--                              val pb = tuple.0
+--                              bind(fun (x: b) => runArrow(x, t2), pb) -- Par[(Par[c], Par [b -> Par[c]])]
+--                            end, pTuple)
+--                     end
+--   liftv(transformer)
+-- end
 
 
-fun cccc[a, b, c](p1: PArrow[a, Par[b]], p2: PArrow[b, Par[c]]): unit
-  -- TODO: Solve this function
-  p2 >> (fun (fn: b -> Par[c])
-           val clos = fun (pb: Par[b]) => bind(fn, pb)
-           A.compose(p1, liftv(clos)) -- Par[a -> Par[b]] -> Par[b -> Par[c]]
-         end)
-end
+-- fun cccc[a, b, c](p1: PArrow[a, Par[b]], p2: PArrow[b, Par[c]]): unit
+--   -- TODO: Solve this function
+--   p2 >> (fun (fn: b -> Par[c])
+--            val clos = fun (pb: Par[b]) => bind(fn, pb)
+--            A.compose(p1, liftv(clos)) -- Par[a -> Par[b]] -> Par[b -> Par[c]]
+--          end)
+-- end
