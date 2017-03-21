@@ -23,7 +23,7 @@ end
 -- Transformer[a, b] = PArrow[a, Par[(Par[b], Par [a -> Par[b]])]]
 -- Transformer[b, c] = PArrow[b, Par[(Par[c], Par [b -> Par[c]])]]
 -- Transformer[a, c] = PArrow[a, Par[(Par[c], Par [a -> Par[c]])]]
-fun composeT[a, b, c](t1: Transformer[a, b], t2: Transformer[b, c]): PArrow[a, Par[(Par[c], Par [a -> Par[c]])]]
+fun composeT[a, b, c](t1: Transformer[a, b], t2: Transformer[b, c]): Transformer[a, c]
   val transformer = fun (x: a)
                       val pTuple = join(runArrow(x, t1)) -- Par[(Par[b], Par [a -> Par[b]])]
                       val clos = fun (tuple: (Par[b], PArrow[a, Par[b]]))
@@ -38,8 +38,33 @@ fun composeT[a, b, c](t1: Transformer[a, b], t2: Transformer[b, c]): PArrow[a, P
   liftv(transformer)
 end
 
+fun runTrans[a, b](item: a, t: Transformer[a, b]): Par[(Par[b], Transformer[a, b])]
+  val pp = join(runArrow(item, t))  -- Par[(Par[b], Par[a -> Par[b]])]
+  pp >> (fun (p: (Par[b], Par[a -> Par[b]]))
+          (p.0, arrT(p.1))
+         end)
+end
+
+fun inc(x: int): Par[int]
+  println("Printing Inc: {}", x + 1)
+  liftv(x + 1)
+end
+
+fun double(x: int): Par[int]
+  println("Printing Double: {}", x * x)
+  liftv(x * x)
+end
+
 class Main
   def main(): unit
-    ()
+    val arrowInc = A.arr(inc)
+    val arrowDouble = A.arr(double)
+    val transformerInc = arrT(arrowInc)
+    val transformerDouble = arrT(arrowDouble)
+    val transformer = composeT(transformerInc, transformerDouble)
+    val p = runTrans(3, transformer)
+    p >> (fun (t: (Par[int], Transformer[int, int]))
+            (t.0) >> fun (x: int) => runTrans(x, t.1)
+          end)
   end
 end
