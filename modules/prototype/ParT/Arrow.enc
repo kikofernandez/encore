@@ -3,6 +3,7 @@ module Arrow(
     first,
     second,
     compose,
+    composePar,
     fanout,
     combine,
     liftA2,
@@ -79,7 +80,7 @@ fun second[a, b, c](p : PArrow[a, b]) : PArrow[(c, a), (c, b)]
 end
 
 --
--- compose :: PArrow[a, d] -> PArrow[d, c]) -> PArrow[a, c]
+-- compose :: PArrow[a, d] -> PArrow[d, c] -> PArrow[a, c]
 --
 -- Parallel arrow composition. The output of the first arrow is given as
 -- input to the second arrow.
@@ -88,6 +89,19 @@ fun compose[a, d, c](p : PArrow[a, d], p2 : PArrow[d, c]) : PArrow[a, c]
   bind(fun (fn : a -> d)
          bind(fun (fn2 : d -> c) => arr(fun (x : a) => fn2(fn(x))), p2)
        end, p)
+end
+
+--
+-- composePar :: PArrow[a, Par[b]] -> PArrow[b, Par[c]] -> PArrow[a, Par[c]]
+--
+-- Parallel monadic arrow composition. The output of the first arrow is given as
+-- input to the second arrow. The output of each arrow is always flatten.
+--
+fun composePar[a, b, c](p1: PArrow[a, Par[b]], p2: PArrow[b, Par[c]]): PArrow[a, Par[c]]
+  bind(fun (fn: b -> Par[c])
+           val clos = fun (pb: Par[b]) => bind(fn, pb)
+           compose(p1, liftv(clos))
+       end, p2)
 end
 
 --
