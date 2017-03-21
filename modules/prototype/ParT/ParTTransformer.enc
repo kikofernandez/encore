@@ -1,20 +1,20 @@
 module ParTTransformer (
-    arrT,
-    first,)
+    arrT,)
 
 import ParT.ParT
 import ParT.Arrow as A
 
-typedef Transformer[a, b] = PArrow[a, (Par[b], Par [a -> Par[b]])]
+typedef Transformer[a, b] = PArrow[a, Par[(Par[b], Par [a -> Par[b]])]]
 
 fun arrT[a, b](fn: PArrow[a, Par[b]]): Transformer[a, b]
   val transformer = fun (x: a) => join(runArrow(x, fn))
-  A.arr(fun (y: a) => (transformer(y), A.arr(transformer)))
+  -- issue: `A.arr` is synonym for `liftv` but it does not typecheck
+  A.arr(fun (y: a) => liftv((transformer(y), A.arr(transformer))))
 end
 
 fun first[a, b, c](fn: PArrow[a, Par[b]]): Transformer[(a, c), (b, c)]
   val transformer = fun (t: (a, c)) => join(runArrow(t.0, fn)) >> fun (x: b) => (x, t.1)
-  A.arr(fun (t: (a, c)) => (transformer(t), A.arr(transformer)))
+  A.arr(fun (t: (a, c)) => liftv((transformer(t), A.arr(transformer))))
 end
 
 -- a b c -> (b, a b c)
