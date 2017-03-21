@@ -17,9 +17,10 @@ fun first[a, b, c](fn: PArrow[a, Par[b]]): Transformer[(a, c), (b, c)]
   A.arr(fun (t: (a, c)) => (transformer(t), A.arr(transformer)))
 end
 
-
+-- a b c -> (b, a b c)
 -- Transformer[a, b] = PArrow[a, (Par[b], Par [a -> Par[b]])]
 -- Transformer[b, c] = PArrow[b, (Par[c], Par [b -> Par[c]])]
+-- Transformer[a, c] = PArrow[a, (Par[c], Par [a -> Par[c]])]
 fun compose[a, b, c](t1: Transformer[a, b], t2: Transformer[b, c]): PArrow[a, Par[(Par[c], Par [b -> Par[c]])]]
   val transformer = fun (x: a)
                       val pTuple = runArrow(x, t1) -- Par[(Par[b], Par [a -> Par[b]])]
