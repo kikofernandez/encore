@@ -164,7 +164,7 @@ end
 --
 -- runParrArrow :: Par[a] -> PArrow[a, b] -> Par[b]
 --
--- Given a ParT collection and a parallel arrow, lift each item in the ParT
+-- Given a ParT tion and a parallel arrow, lift each item in the ParT
 -- to the arrow function. return a ParT collection.
 --
 fun runParArrow[a, b](p: Par[a], arrow: PArrow[a, b]): Par[b]

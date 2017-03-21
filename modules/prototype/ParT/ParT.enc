@@ -48,7 +48,7 @@ fun filter[a](fn : a -> bool, ps : Par[a]) : Par[a]
 end
 
 --
--- bind :: (a -> bool) ->  Par[a] -> Par[a]
+-- bind :: (a -> Par[b]) ->  Par[a] -> Par[b]
 --
 -- run function `fn` (possibly in parallel) over the items contained
 -- in the ParT `p`, returning a new ParT collection.
