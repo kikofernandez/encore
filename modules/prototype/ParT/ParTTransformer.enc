@@ -19,7 +19,6 @@ fun firstT[a, b, c](fn: PArrow[a, Par[b]]): Transformer[(a, c), (b, c)]
   A.arr(fun (t: (a, c)) => liftv((transformer(t), A.arr(transformer))))
 end
 
--- a b c -> (b, a b c)
 -- Transformer[a, b] = PArrow[a, Par[(Par[b], Par [a -> Par[b]])]]
 -- Transformer[b, c] = PArrow[b, Par[(Par[c], Par [b -> Par[c]])]]
 -- Transformer[a, c] = PArrow[a, Par[(Par[c], Par [a -> Par[c]])]]
@@ -45,26 +44,69 @@ fun runTrans[a, b](item: a, t: Transformer[a, b]): Par[(Par[b], Transformer[a, b
          end)
 end
 
+fun runTransT[a, b](item: a, t: Transformer[a, b]): Par[b]
+  val pp = join(runArrow(item, t))
+  bind(fun (p: (Par[b], Par[a -> Par[b]])) => p.0, pp)
+end
+
+fun runParTrans[a, b](p: Par[a], t: Transformer[a, b]): Par[b]
+  bind(fun (x: a) => runTransT(x, t), p)
+end
+
+fun fixpoint[a](t: Transformer[a, a], p: Par[a], fn: a -> bool): Par[a]
+  while true do
+    print(".")
+    val result = runParTrans(p, t)
+    -- TODO: better if this was not a synchronisation point
+    val b = get(all(result, fn))
+    if b then
+      return result
+    end
+  end
+  return empty[a]()
+end
+
 fun inc(x: int): Par[int]
-  println("Printing Inc: {}", x + 1)
   liftv(x + 1)
 end
 
 fun double(x: int): Par[int]
-  println("Printing Double: {}", x * x)
   liftv(x * x)
 end
 
+fun convertToTrue(x: bool): Par[bool]
+  if not x then
+    liftv(true)
+  else
+    liftv(x)
+  end
+end
+
+fun flipBool(x: bool): Par[bool]
+  liftv(not x)
+end
+
+
 class Main
   def main(): unit
-    val arrowInc = A.arr(inc)
-    val arrowDouble = A.arr(double)
-    val transformerInc = arrT(arrowInc)
-    val transformerDouble = arrT(arrowDouble)
-    val transformer = composeT(transformerInc, transformerDouble)
-    val p = runTrans(3, transformer)
-    p >> (fun (t: (Par[int], Transformer[int, int]))
-            (t.0) >> fun (x: int) => runTrans(x, t.1)
-          end)
+    -- val arrowInc = A.arr(inc)
+    -- val arrowDouble = A.arr(double)
+    -- val transformerInc = arrT(arrowInc)
+    -- val transformerDouble = arrT(arrowDouble)
+    -- val transformer = composeT(transformerInc, transformerDouble)
+    -- val p = runTrans(3, transformer)
+    -- p >> (fun (t: (Par[int], Transformer[int, int]))
+    --         (t.0) >> fun (x: int) => runTrans(x, t.1)
+    --       end)
+
+    println("Example.enc")
+    val pp = liftv(false) ||| liftv(true)
+    val convertB = A.arr(convertToTrue)
+    val transformerB = arrT(convertB)
+    fixpoint(transformerB, pp, fun (b: bool) => b)
+
+    val flip = A.arr(flipBool)
+    val transformerFlip = arrT(flip)
+    fixpoint(transformerFlip, pp, fun (b: bool) => b)
   end
 end
