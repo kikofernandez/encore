@@ -86,6 +86,9 @@ fun flipBool(x: bool): Par[bool]
   liftv(not x)
 end
 
+-- TODO: add the switch combinator (some paper, for runtime switch of streams)
+-- TODO: add the kill combinator which kills streams running ParTs
+
 
 class Main
   def main(): unit
