@@ -558,17 +558,17 @@ read class TaskPool
 
   def execute[sharable t](fn: () -> t): Fut[t]
     val index = EMBED (uint)
-                  uint64_t current = __atomic_load_n(&#{this.index}, __ATOMIC_ACQUIRE);
+                  uint64_t current = __atomic_load_n(&#{this.index}, __ATOMIC_RELAXED);
                   uint64_t next = (current + 1) % #{this.numberWorkers};
 
                   while (!__atomic_compare_exchange_n(&#{this.index},
                                                       &current,
                                                       next,
                                                       false,
-                                                      __ATOMIC_RELEASE,
+                                                      __ATOMIC_RELAXED,
                                                       __ATOMIC_RELAXED))
                   {
-                    current = __atomic_load_n(&#{this.index}, __ATOMIC_ACQUIRE);
+                    current = __atomic_load_n(&#{this.index}, __ATOMIC_RELAXED);
                     next = (current + 1) % #{this.numberWorkers};
                   }
                   current;
