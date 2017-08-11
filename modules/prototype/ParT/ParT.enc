@@ -521,10 +521,10 @@ fun loopF[t, t'](item: t,
          if exitCondition(x) then
            liftv(x)
          else
-           -- process asynchronously
-           -- it may be wise to limit the number of tasks via task pool
-
+           -- TODO: Evaluate alternative:
+           --   1. Task pool
            join(liftf(pool.execute(fun () => loopF(item, fn, exitCondition, pool))))
+           --   2. Creation of a short-lived actor for each iteration
            -- join(liftf(async(loopF(item, fn, exitCondition, pool))))
          end
        end, fn(item))
