@@ -1032,8 +1032,7 @@ stream_value_from_party(pony_ctx_t** ctx,
 static inline void party_promise_prune(pony_ctx_t **ctx,
                                        future_t *promise,
                                        par_t *par,
-                                       __attribute__ ((unused)) pony_type_t *parType,
-                                       __attribute__ ((unused)) pony_type_t *returnedType)
+                                       pony_type_t *parType)
 {
   // 1. Start iterating through ParT and attaching fulfilment of future
   //    if an element of the ParT is fulfilled. only the first fulfilled item
@@ -1058,7 +1057,6 @@ static inline void party_promise_prune(pony_ctx_t **ctx,
   // If parT is found, traverse left and right until future or value is found.
   // If value is found, make direct function call (no need for closure indirection)
   //   and call on prune method on parT.
-  (void) c;
   list_t *tmp_lst = NULL;
   par_t *p = par;
   while(p){
@@ -1113,7 +1111,7 @@ par_t* party_prune(pony_ctx_t **ctx,
                    closure_t *fn,
                    par_t *par,
                    pony_type_t *parType,
-                   pony_type_t *returnedType)
+                   __attribute__ ((unused)) pony_type_t *returnedType)
 {
   // this future is a promise, i.e. fulfilled by a function, not an actor.
   // INFO: make sure the promise is fulfilled with an Maybe[t]
@@ -1122,7 +1120,7 @@ par_t* party_prune(pony_ctx_t **ctx,
   // this function needs to be asynchronous, non-blocking
   // although iteration over things is ok as long as it doesn't block, i.e.
   // await for a ParT item to finish.
-  party_promise_prune(ctx, promise, par, parType, returnedType);
+  party_promise_prune(ctx, promise, par, parType);
 
   return closure_call(ctx, fn, (value_t[]) {[0] = {.p = promise }}).p;
 }
