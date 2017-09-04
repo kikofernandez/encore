@@ -79,4 +79,20 @@ void future_register_callback(pony_ctx_t **ctx,
  * puts on hold the processing of this message.
  */
 void future_await(pony_ctx_t **ctx, future_t *fut);
+
+/** checks if the future has been killed
+ *
+ * a future that has been killed does not need to run its pending computations
+ */
+bool future_killed(future_t *fut);
+
+/** Kill the future and their transitive reachable parents
+ *
+ * this operation traverses the future and its parents marking them to not run
+ * any more chained computations. if the future contains external actors that need
+ * to be awaken, the computation should not be killed (there are other actors
+ * interested in the result)
+ */
+void future_kill(pony_ctx_t **ctx, future_t *fut);
+
 #endif

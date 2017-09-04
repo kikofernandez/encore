@@ -442,6 +442,9 @@ futureTraceFn = Nam "future_trace"
 futureFulfil :: CCode Name
 futureFulfil = Nam "future_fulfil"
 
+futureKilled :: CCode Name
+futureKilled = Nam "future_killed"
+
 futureAwait :: CCode Name
 futureAwait = Nam "future_await"
 

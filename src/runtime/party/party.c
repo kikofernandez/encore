@@ -988,9 +988,38 @@ static void trace_collect_from_stream_party(pony_ctx_t *_ctx, void *p)
 
 // TODO:
 static inline void selective_prune_party(__attribute__ ((unused)) pony_ctx_t **ctx,
-                                         __attribute__ ((unused)) par_t *p)
+                                         __attribute__ ((unused)) par_t *par)
 {
-  (void)0;
+  list_t *tmp_lst = NULL;
+  par_t *p = par;
+  while (p) {
+    switch(p->tag){
+    case EMPTY_PAR: {
+      tmp_lst = list_pop(tmp_lst, (value_t*)&p);
+      break;
+    }
+    case VALUE_PAR: {
+      tmp_lst = list_pop(tmp_lst, (value_t*)&p);
+      break;
+    }
+    case FUTURE_PAR: {
+
+      break;
+    }
+    case PAR_PAR: {
+      break;
+    }
+    case FUTUREPAR_PAR: {
+      break;
+    }
+    case ARRAY_PAR: {
+      break;
+    }
+    default: {
+      exit(-1);
+    }
+    }
+  }
 }
 
 // (noreturn) closure signature does not allow a not return

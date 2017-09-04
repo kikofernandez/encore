@@ -152,14 +152,17 @@ dispatchFunDecl cdecl@(A.Class{A.cname, A.cfields, A.cmethods}) =
              methodCall =
                Statement $
                if null $ Util.filter A.isForward (A.mbody mdecl)
-               then Call futureFulfil
+               then If (Call futureKilled [futVar])
+                       Break
+                       (Statement $
+                         Call futureFulfil
                          [AsExpr encoreCtxVar,
                           AsExpr $ futVar,
                           asEncoreArgT (translate $ A.methodType mdecl)
                           (Call (methodImplName cname mName)
                                 (encoreCtxVar : thisVar :
                                 pMethodArrName :
-                                map (AsLval . argName . A.pname) mParams))]
+                                map (AsLval . argName . A.pname) mParams))])
                else forwardMethodCall mName pMethodArrName mParams futVar
 
        forwardMethodCall = \mName pMethodArrName mParams lastArg ->

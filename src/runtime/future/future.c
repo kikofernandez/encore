@@ -87,14 +87,27 @@ struct future
   pony_type_t *future_type;
   encore_arg_t      value;
   pony_type_t    *type;
+  bool killed;
   bool            fulfilled;
   // Stupid limitation for now
   actor_entry_t   responsibilities[16];
+
+  // KIKO: responsibilities represent futures blocked until the computation finishes.
+  // a number bigger than 0 means that there is at least one actor. if this is
+  // the case, you cannot prune the future
   int             no_responsibilities;
+
   // Lock-based for now
   pthread_mutex_t lock;
+
+  // KIKO: on which other future do I depend on to run? used only when chaining
   future_t *parent;
+
+  // KIKO: If there are no awaiting actors, no need to compute these
+  //       computations. there represent chained computations on the future.
   closure_entry_t *children;
+
+  // KIKO: if there are awaiting actors, you cannot kill the future
   actor_list *awaited_actors;
 };
 
@@ -463,4 +476,23 @@ static inline void future_gc_recv_value(pony_ctx_t *ctx, future_t *fut)
   future_gc_trace_value(ctx, fut);
   // note the asymmetry with send
   ponyint_gc_handlestack(ctx);
+}
+
+void future_kill(pony_ctx_t **ctx, future_t *fut)
+{
+  (void) ctx;
+  BLOCK;
+  if ((fut->no_responsibilities == 0) && // there is no blocking actor on future
+      (fut->parent == NULL) && // fresh future, it has no parent
+      (fut->children == NULL) && // the future has not been chained on
+      (fut->awaited_actors == NULL) // no awaiting actors for the result
+      )
+  {
+  }
+  UNBLOCK;
+}
+
+bool future_killed(future_t *fut)
+{
+  return fut->killed;
 }
