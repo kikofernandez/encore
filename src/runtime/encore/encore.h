@@ -74,6 +74,14 @@ typedef enum {
   _ENC__MSG_MAIN,
 } encore_msg_id;
 
+typedef enum {
+  READ = 0,
+  LINEAR,
+  LOCAL,
+  SUBORD,
+  ACTOR
+} mode_type;
+
 struct encore_oneway_msg
 {
   struct pony_msg_t pad;

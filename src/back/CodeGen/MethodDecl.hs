@@ -150,11 +150,15 @@ callMethodWithFuture m cdecl@(A.Class {A.cname}) code
            (parametricMethodTypeVars m) :
            map (assignTypeVar cname) (Ty.getTypeParameters cname) ++
            assignFut :
+           Statement addMode :
            Gc.ponyGcSendFuture (argPairs m) ++
            msg ++ [retStmt]
     in code ++ [Function retType fName args fBody]
   | otherwise = code
   where
+    addMode = Call futureSetModeFn $ futVar :
+              if Ty.isLinearSingleType mType then [linearMode]
+              else [readMode]
     mType = A.methodType m
     retStmt = Return futVar
     mName = A.methodName m

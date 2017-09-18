@@ -110,6 +110,12 @@ par = Ptr $ Typ "par_t"
 capability :: CCode Ty
 capability = Ptr $ Typ "capability_t"
 
+linearMode :: CCode Lval
+linearMode = Var "LINEAR"
+
+readMode :: CCode Lval
+readMode = Var "READ"
+
 ponyTraceFnType :: CCode Ty
 ponyTraceFnType = Typ "pony_trace_fn"
 
@@ -480,6 +486,9 @@ streamMkFn = Nam "stream_mk"
 
 futureMkFn :: CCode Name
 futureMkFn = Nam "future_mk"
+
+futureSetModeFn :: CCode Name
+futureSetModeFn = Nam "future_set_mode"
 
 rangeMkFn :: CCode Name
 rangeMkFn = Nam "range_mk"

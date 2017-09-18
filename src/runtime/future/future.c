@@ -88,6 +88,7 @@ struct future
   encore_arg_t      value;
   pony_type_t    *type;
   bool killed;
+  mode_type mode;
   bool            fulfilled;
   // Stupid limitation for now
   actor_entry_t   responsibilities[16];
@@ -495,4 +496,9 @@ void future_kill(pony_ctx_t **ctx, future_t *fut)
 bool future_killed(future_t *fut)
 {
   return fut->killed;
+}
+
+
+void future_set_mode(future_t *fut, mode_type mode){
+  fut->mode = mode;
 }
