@@ -262,7 +262,7 @@ partyEach :: CCode Name
 partyEach = Nam "party_each"
 
 partyNewParP :: CCode Name
-partyNewParP = Nam "new_par_p"
+partyNewParP = Nam "new_par_p_mode"
 
 partyNewParV :: CCode Name
 partyNewParV = Nam "new_par_v"

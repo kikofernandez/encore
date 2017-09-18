@@ -483,14 +483,44 @@ void future_kill(pony_ctx_t **ctx, future_t *fut)
 {
   (void) ctx;
   BLOCK;
-  if ((fut->no_responsibilities == 0) && // there is no blocking actor on future
-      (fut->parent == NULL) && // fresh future, it has no parent
-      (fut->children == NULL) && // the future has not been chained on
-      (fut->awaited_actors == NULL) // no awaiting actors for the result
-      )
-  {
-  }
-  UNBLOCK;
+    switch (fut->mode) {
+    case READ: {
+      // do nothing, it may have been shared
+      break;
+    }
+    case LINEAR: {
+      // there cannot be any responsibilities (blocked actors) nor
+      // awaited actors as that would mean that there is aliasing
+      // to the future living inside the ParT => breaks linear references
+      assert(fut->no_responsibilities == 0); // there is no blocking actor on future
+      assert(fut->awaited_actors == NULL); // no awaiting actors for the result
+      if (fut->parent == NULL)
+      {
+        // simple case: no dependencies, e.g. liftf(fut) : ParT and the use of
+        //              prune combinator afterwards.
+        assert(fut->children == NULL); // no awaiting actors for the result
+        fut->killed = true;
+      }
+      else
+      {
+        assert(fut->children != NULL);
+        closure_entry_t *current = fut->children;
+        int i = 0;
+        while(current) {
+          future_kill(ctx, current->future);
+          current = current->next;
+          ++i;
+        }
+        assert(i <= 1);
+        fut->killed = true;
+      }
+      break;
+    }
+    default: {
+      exit(-1);
+    }
+    }
+    UNBLOCK;
 }
 
 bool future_killed(future_t *fut)

@@ -14,6 +14,7 @@ pony_type_t* party_get_type(par_t * const p);
 par_t* new_par_empty(pony_ctx_t **ctx, pony_type_t const * const rtype);
 par_t* new_par_v(pony_ctx_t **ctx, encore_arg_t val, pony_type_t const * const rtype);
 par_t* new_par_f(pony_ctx_t **ctx,future_t* const fut, pony_type_t const * const rtype);
+par_t* new_par_p_mode(pony_ctx_t **ctx, mode_type mode, par_t* const p1, par_t* const p2, pony_type_t const * const rtype);
 par_t* new_par_p(pony_ctx_t **ctx, par_t* const p1, par_t* const p2, pony_type_t const * const rtype);
 par_t* new_par_fp(pony_ctx_t **ctx, future_t* const f, pony_type_t const * const rtype);
 par_t* new_par_array(pony_ctx_t **ctx, array_t* arr, pony_type_t const * const rtype);

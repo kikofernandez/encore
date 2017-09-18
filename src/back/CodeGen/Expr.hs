@@ -105,10 +105,6 @@ unsubstituteVar na = do
 getRuntimeType :: A.Expr -> CCode Expr
 getRuntimeType = runtimeType . Ty.getResultType . A.getType
 
-newParty :: A.Expr -> CCode Name
-newParty (A.PartyPar {}) = partyNewParP
-newParty _ = error "Expr.hs: node is not 'PartyPar'"
-
 translateDecl (vars, expr) = do
   (ne, te) <- translate expr
   let exprType = A.getType expr
@@ -187,9 +183,23 @@ instance Translatable A.Expr (State Ctx.Context (CCode Lval, CCode Stat)) where
     (nleft, tleft) <- translate parl
     (nright, tright) <- translate parr
     let runtimeT = (runtimeType . A.getType) p
+
     (npar, tpar) <- namedTmpVar "par" (A.getType p) $
-                        Call (newParty p) [AsExpr encoreCtxVar, AsExpr nleft, AsExpr nright, runtimeT]
+                        Call (newParty p)
+                             [AsExpr encoreCtxVar,
+                              AsExpr getMode,
+                              AsExpr nleft,
+                              AsExpr nright,
+                              runtimeT]
     return (npar, Seq [tleft, tright, tpar])
+    where
+      newParty :: A.Expr -> CCode Name
+      newParty (A.PartyPar {}) = partyNewParP
+      newParty _ = error "Expr.hs: node is not 'PartyPar'"
+
+      getMode :: CCode Lval
+      getMode = if A.isFree p then linearMode
+                else readMode
 
   translate ps@(A.PartySeq {A.par, A.seqfunc}) = do
     (npar, tpar) <- translate par
