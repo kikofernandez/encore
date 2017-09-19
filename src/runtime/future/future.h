@@ -95,6 +95,6 @@ bool future_killed(future_t *fut);
  */
 void future_kill(pony_ctx_t **ctx, future_t *fut);
 
-
+mode_type future_get_mode(future_t *fut);
 void future_set_mode(future_t *fut, mode_type mode);
 #endif

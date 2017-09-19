@@ -1,8 +1,12 @@
 module ParT(
     empty,
+    emptyL,
     liftv,
+    liftvL,
     liftf,
+    liftfL,
     join,
+    joinL,
     extract,
     each,
     filter,
@@ -22,6 +26,7 @@ module ParT(
     max,
     min,
     prune,
+    pruneL,
     loop,
   )
 
@@ -33,6 +38,12 @@ import Task
 -- create an empty ParT.
 --
 fun empty[a]() : Par[a]
+  EMBED (Par[a])
+    new_par_empty(_ctx, runtimeType[0]);
+  END
+end
+
+fun emptyL[linear a]() : Par[a]
   EMBED (Par[a])
     new_par_empty(_ctx, runtimeType[0]);
   END
@@ -454,6 +465,12 @@ fun join[t](p : Par[Par[t]]): Par[t]
   END
 end
 
+fun joinL[linear t](p : Par[Par[t]]): Par[t]
+  EMBED (Par[t])
+    party_join(_ctx, #{p});
+  END
+end
+
 --
 -- liftf :: Fut[t] -> Par[t]
 --
@@ -465,12 +482,24 @@ fun liftf[t](fut: Fut[t]): Par[t]
   END
 end
 
+fun liftfL[linear t](fut: Fut[t]): Par[t]
+  EMBED (Par[t])
+    new_par_f(_ctx, #{fut}, _enc__type_t);
+  END
+end
+
 --
 -- liftv :: t -> Par[t]
 --
 -- lifts a value into a parallel collection.
 --
 fun liftv[t](item: t): Par[t]
+  EMBED (Par[t])
+    new_par_v(_ctx, #{item}, _enc__type_t);
+  END
+end
+
+fun liftvL[linear t](item: t): Par[t]
   EMBED (Par[t])
     new_par_v(_ctx, #{item}, _enc__type_t);
   END
@@ -497,6 +526,12 @@ fun prune[t, t'](fn: Fut[Maybe[t]] -> Par[t'], p: Par[t]): Par[t']
   END
 end
 
+
+fun pruneL[linear t, linear t'](fn: Fut[Maybe[t]] -> Par[t'], p: Par[t]): Par[t']
+  EMBED (Par[t'])
+    party_prune(_ctx, #{fn}, #{p}, _enc__type_t, _enc__t__type_t_prime);
+  END
+end
 
 --
 -- loop :: Par[t] -> (t -> Par[t']) -> (t' -> bool) -> Par[t']

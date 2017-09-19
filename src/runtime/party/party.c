@@ -31,6 +31,7 @@ struct par_t {
   enum PTAG tag;
   pony_type_t* rtype;
   uint64_t size;
+  mode_type mode;
   union ParU {
     EMPTY_PARs s;
     VALUE_PARs v;
@@ -223,6 +224,7 @@ par_t* new_par_v(pony_ctx_t **ctx, encore_arg_t val, pony_type_t const * const r
 par_t* new_par_f(pony_ctx_t **ctx, future_t* f, pony_type_t const * const rtype){
   par_t* p = init_par(ctx, FUTURE_PAR, rtype);
   set_par_future(f, NULL, p);
+  p->mode = future_get_mode(f);
   p->size = 1;
   return p;
 }
@@ -998,7 +1000,7 @@ static void trace_collect_from_stream_party(pony_ctx_t *_ctx, void *p)
 
 // TODO:
 static inline void selective_prune_party(__attribute__ ((unused)) pony_ctx_t **ctx,
-                                         __attribute__ ((unused)) par_t *par)
+                                         par_t *par)
 {
   list_t *tmp_lst = NULL;
   par_t *p = par;
@@ -1013,10 +1015,14 @@ static inline void selective_prune_party(__attribute__ ((unused)) pony_ctx_t **c
       break;
     }
     case FUTURE_PAR: {
-
+      future_kill(ctx, party_get_fut(p));
+      tmp_lst = list_pop(tmp_lst, (value_t*)&p);
       break;
     }
     case PAR_PAR: {
+      par_t *right = p->data.p.right;
+      tmp_lst = list_push(tmp_lst, (value_t) {.p = right });
+      p = p->data.p.left;
       break;
     }
     case FUTUREPAR_PAR: {

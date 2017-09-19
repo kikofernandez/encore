@@ -253,6 +253,10 @@ void future_fulfil(pony_ctx_t **ctx, future_t *fut, encore_arg_t value)
   {
     closure_entry_t *current = fut->children;
     while(current) {
+      if (current->future->killed){
+        current = current->next;
+        continue;
+      }
       encore_arg_t result = run_closure(ctx, current->closure, value);
       if (current->future) {
         // This case happens when futures can be chained on.
@@ -340,13 +344,17 @@ static void future_chain(pony_ctx_t **ctx, future_t *fut, pony_type_t *type,
   perr("future_chain_actor");
   BLOCK;
 
-  if (fut->fulfilled) {
+  if (fut->fulfilled && !fut->killed) {
     acquire_future_value(ctx, fut);
     value_t result = run_closure(ctx, c, fut->value);
     future_fulfil(ctx, r, result);
     UNBLOCK;
     return;
+  } else if (fut->killed){
+    UNBLOCK;
+    return;
   }
+
 
   pony_ctx_t* cctx = *ctx;
   closure_entry_t *entry = encore_alloc(cctx, sizeof *entry);
@@ -482,7 +490,7 @@ static inline void future_gc_recv_value(pony_ctx_t *ctx, future_t *fut)
 void future_kill(pony_ctx_t **ctx, future_t *fut)
 {
   (void) ctx;
-  BLOCK;
+  if (pthread_mutex_trylock(&fut->lock) == 0){
     switch (fut->mode) {
     case READ: {
       // do nothing, it may have been shared
@@ -521,6 +529,11 @@ void future_kill(pony_ctx_t **ctx, future_t *fut)
     }
     }
     UNBLOCK;
+  } else {
+    // we were traversing the future and found that the future is being
+    // fulfilled. back off and recursively unlock the acquired locks.
+    (void) 0;
+  }
 }
 
 bool future_killed(future_t *fut)
@@ -528,6 +541,9 @@ bool future_killed(future_t *fut)
   return fut->killed;
 }
 
+mode_type future_get_mode(future_t *fut){
+  return fut->mode;
+}
 
 void future_set_mode(future_t *fut, mode_type mode){
   fut->mode = mode;
