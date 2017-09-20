@@ -1,0 +1,3 @@
+[linear]	[pruning]		value: 50
+[read]		[pruning]		value: 1000
+[read]		[future_chaining]		value:1000

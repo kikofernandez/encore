@@ -1,0 +1,102 @@
+import ParT.ParT
+
+EMBED
+#include <unistd.h>
+END
+
+fun continuation(var fut : Fut[Maybe[Object]]): Par[Object]
+  joinL(liftfL((consume fut) ~~> fun (var m : Maybe[Object]) : Par[Object]
+                                   match consume m with
+                                     case Just(o) =>
+                                       do
+                                         var oo = EMBED (Object) #{o}; END
+                                         println("[linear]\t[pruning]\t\tvalue: {}", oo.x)
+                                         liftvL(consume oo)
+                                       end
+                                     end
+                                     case Nothing =>
+                                       do
+                                         println("Error")
+                                         emptyL[Object]()
+                                       end
+                                     end
+                                   end
+                                 end))
+end
+
+fun continuationRead(var fut : Fut[Maybe[ReadObject]]): Par[ReadObject]
+  joinL(liftfL((consume fut) ~~> fun (var m : Maybe[ReadObject]) : Par[ReadObject]
+                                   match consume m with
+                                     case Just(o) =>
+                                       do
+                                         var oo = EMBED (ReadObject) #{o}; END
+                                         println("[read]\t\t[pruning]\t\tvalue: {}", oo.x)
+                                         liftvL(oo)
+                                       end
+                                     end
+                                     case Nothing =>
+                                       do
+                                         println("Empty")
+                                         emptyL[ReadObject]()
+                                       end
+                                     end
+                                   end
+                                 end))
+end
+
+
+active class Agent
+  def private sleep(seconds: int): unit
+    EMBED (unit)
+      sleep(#{seconds});
+    END
+  end
+
+  def go() : Object
+    this.sleep(1)
+    new Object()
+  end
+
+  def readObject(): ReadObject
+    this.sleep(1)
+    new ReadObject()
+  end
+end
+
+linear class Object
+  var x: int = 50
+end
+
+read class ReadObject
+  val x: int = 1000
+end
+
+active class Main
+  def private test_basic_linear_future_chaining(): unit
+    val a = new Agent()
+    var fut = (a ! go()) ~~> (fun (var o : Object) : Object
+                                o.x = 3
+                                println("[linear]\tObject is {}", o.x)
+                                consume o
+                              end)
+    var oo = new Object()
+    var p = (liftvL(consume oo)) ||| (liftfL(consume fut))
+    pruneL(continuation, consume p)
+  end
+
+  def private test_basic_read_future_chaining(): unit
+    val a = new Agent()
+    var fut = (a ! readObject()) ~~> (fun (o : ReadObject) : ReadObject
+                                        println("[read]\t\t[future_chaining]\t\tvalue:{}", o.x)
+                                        o
+                                      end)
+    var oo = new ReadObject()
+    var p = liftv(oo) ||| liftf(fut)
+    pruneL(continuationRead, p)
+  end
+
+  def main(): unit
+    this.test_basic_linear_future_chaining()
+    this.test_basic_read_future_chaining()
+  end
+end
