@@ -1026,9 +1026,12 @@ static inline void selective_prune_party(__attribute__ ((unused)) pony_ctx_t **c
       break;
     }
     case FUTUREPAR_PAR: {
+      future_kill(ctx, party_get_futpar(p));
+      tmp_lst = list_pop(tmp_lst, (value_t*)&p);
       break;
     }
     case ARRAY_PAR: {
+      tmp_lst = list_pop(tmp_lst, (value_t*)&p);
       break;
     }
     default: {
