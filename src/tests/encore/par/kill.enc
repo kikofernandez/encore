@@ -87,7 +87,7 @@ active class Main
   def private test_basic_read_future_chaining(): unit
     val a = new Agent()
     var fut = (a ! readObject()) ~~> (fun (o : ReadObject) : ReadObject
-                                        println("[read]\t\t[future_chaining]\t\tvalue:{}", o.x)
+                                        println("[read]\t\t[future_chaining]\tvalue:{}", o.x)
                                         o
                                       end)
     var oo = new ReadObject()

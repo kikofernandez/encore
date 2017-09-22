@@ -137,7 +137,7 @@ static inline void trace_array_par(pony_ctx_t *ctx, par_t* obj){
       void* val = array_get(ar, i).p;
       encore_trace_actor(ctx, val);
     }
-  }else if(obj->rtype != ENCORE_PRIMITIVE){
+  }else{
     pony_trace_fn trace_fn = obj->rtype->trace;
     for(size_t i = 0; i<array_size(ar); i++){
       void* val = array_get(ar, i).p;

@@ -253,7 +253,8 @@ void future_fulfil(pony_ctx_t **ctx, future_t *fut, encore_arg_t value)
   {
     closure_entry_t *current = fut->children;
     while(current) {
-      if (current->future->killed){
+      if (current->future && current->future->killed){
+        // if the future exists and has been killed, then skip
         current = current->next;
         continue;
       }
@@ -506,12 +507,11 @@ void future_kill(pony_ctx_t **ctx, future_t *fut)
       {
         // simple case: no dependencies, e.g. liftf(fut) : ParT and the use of
         //              prune combinator afterwards.
-        assert(fut->children == NULL); // no awaiting actors for the result
+        assert(fut->children == NULL); // no chained computations
         fut->killed = true;
       }
       else
       {
-        assert(fut->children != NULL);
         closure_entry_t *current = fut->children;
         int i = 0;
         while(current) {
