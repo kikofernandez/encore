@@ -9,11 +9,13 @@ module ParT(
     joinL,
     extract,
     each,
+    eachL,
     filter,
     bind,
     foreachp,
     aggregate,
     intersection,
+    intersectionL,
     distinct,
     union,
     app,
@@ -28,6 +30,8 @@ module ParT(
     prune,
     pruneL,
     loop,
+    convergence,
+    fix
   )
 
 import Task
@@ -97,6 +101,12 @@ end
 -- return the items that are in both ParTs given a comparator function.
 --
 fun intersection[t](p1 : Par[t], p2 : Par[t], cmp : (t, t) -> int) : Par[t]
+  EMBED (Par[t])
+    party_intersection(_ctx, #{p1}, #{p2}, #{cmp}, _enc__type_t);
+  END
+end
+
+fun intersectionL[linear t](p1 : Par[t], p2 : Par[t], cmp : (t, t) -> int) : Par[t]
   EMBED (Par[t])
     party_intersection(_ctx, #{p1}, #{p2}, #{cmp}, _enc__type_t);
   END
@@ -519,6 +529,11 @@ fun each[t](arr: [t]): Par[t]
   END
 end
 
+fun eachL[linear t](arr: [t]): Par[t]
+  EMBED (Par[t])
+    new_par_array(_ctx, #{arr}, _enc__type_t);
+  END
+end
 
 fun prune[t, t'](fn: Fut[Maybe[t]] -> Par[t'], p: Par[t]): Par[t']
   EMBED (Par[t'])
@@ -614,4 +629,40 @@ read class TaskPool
                 END
     this.workers(index)!start(fun () => fn())
   end
+end
+
+
+fun convergence[t](p : Par[t],
+                   delay: Par[t],
+                   fn: t -> Par[t],
+                   convergeFn: (Par[t], Par[t]) -> bool): Par[t]
+  val output = bind(fn, p)
+  val looping = fun (prev : Par[t]) : Par[t] -> Par[t]
+                  fun(current : Par[t]) : Par[t]
+                    if convergeFn(prev, current) then
+                      current
+                    else
+                      convergence(current, current, fn, convergeFn)
+                    end
+                  end
+                end
+  val fn = looping(delay)
+  fn(output)
+end
+
+fun fix[t](p : Par[t],
+           fn: t -> Par[t],
+           cmp: (Par[t], Par[t]) -> bool): Par[t]
+  val output = bind(fn, p)
+  val looping = fun (prev : Par[t]) : Par[t] -> Par[t]
+                  fun(current : Par[t]) : Par[t]
+                    if cmp(prev, current) then
+                      current
+                    else
+                      fix(current, fn, cmp)
+                    end
+                  end
+                end
+  val fn = looping(p)
+  fn(output)
 end
