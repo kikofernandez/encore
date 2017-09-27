@@ -401,16 +401,16 @@ static inline par_t* party_join_fp(pony_ctx_t **ctx, par_t* const p){
   return new_par_fp(ctx, chained_fut, get_rtype(p));
 }
 
+// From an Par[array[t]] it creates a leafy balanced tree of Par[t].
+// O (2 * n)
 static inline par_t* party_join_array(pony_ctx_t **ctx, par_t* const p){
   pony_type_t *type = get_rtype(p);
   assert(type == &party_type);
 
   array_t *ar = party_get_array(p);
   size_t size = array_size(ar);
-  // TODO: this creates ParT unbalanced trees.
-  //       another combinator could use recursion to blow the stack. (FIX)
 
-  size_t stack_size = ceil(log2(size))+1;
+  size_t stack_size = ceil(size / 2) + 1;
   par_t *stack[stack_size];
   size_t stack_index = 0;
 
@@ -423,11 +423,9 @@ static inline par_t* party_join_array(pony_ctx_t **ctx, par_t* const p){
       stack[stack_index] = new_p;
       ++stack_index;
     }
-    /* new_p = new_par_p(ctx, new_p, v, type); */
   }
 
   stack_index = 0;
-  size_t stack_size_tmp = stack_size;
   size_t current_index = 0;
   size_t limit_stack = stack_size;
   par_t *node_left;
@@ -437,7 +435,6 @@ static inline par_t* party_join_array(pony_ctx_t **ctx, par_t* const p){
     } else {
       stack[stack_index] = new_par_p(ctx, node_left, stack[current_index], type);
       ++stack_index;
-      --stack_size_tmp;
     }
     ++current_index;
     if (current_index >= limit_stack){
