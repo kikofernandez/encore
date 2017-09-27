@@ -3,7 +3,7 @@ SRC_DIR=src
 RUNTIME_DIR=$(SRC_DIR)/runtime
 
 CONFIG=debug
-CONFIG=release
+# CONFIG=release
 
 RELEASE_DIR=release
 INC_DIR=$(RELEASE_DIR)/inc
