@@ -333,6 +333,7 @@ static par_t* fmap(pony_ctx_t** ctx, closure_t* const f, par_t* in,
       case EMPTY_PAR: {
         LIST_PUSH(par_values, (new_par_empty(ctx, rtype)));
         LIST_POP(tmp_lst, in);
+        break;
       }
 
       case VALUE_PAR: {
@@ -379,6 +380,7 @@ static par_t* fmap(pony_ctx_t** ctx, closure_t* const f, par_t* in,
   par_t * current = NULL, * prev_par = NULL;
   list_t * helper_lst = NULL;
   size_t counter = 0;
+  bool reverse = false;
   LIST_POP(par_values, current);
   while(current){
 
@@ -386,7 +388,13 @@ static par_t* fmap(pony_ctx_t** ctx, closure_t* const f, par_t* in,
       // this is a prev_node (left node)
       prev_par = current;
     } else {
-      par_t *node = new_par_p(ctx, prev_par, current, &party_type);
+      par_t *node = NULL;
+      if (!reverse) {
+        node = new_par_p(ctx, current, prev_par, &party_type);
+      } else {
+        node = new_par_p(ctx, prev_par, current, &party_type);
+      }
+      prev_par = NULL;
       LIST_PUSH(helper_lst, node);
     }
     ++counter;
@@ -394,6 +402,11 @@ static par_t* fmap(pony_ctx_t** ctx, closure_t* const f, par_t* in,
     LIST_POP(par_values, current);
 
     if (current == NULL){
+      if (prev_par && counter != 1) {
+        LIST_PUSH(helper_lst, prev_par);
+        prev_par = NULL;
+      }
+      reverse = !reverse;
       par_values = helper_lst;
       helper_lst = NULL;
       counter = 0;
