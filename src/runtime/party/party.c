@@ -293,28 +293,12 @@ static value_t fmap_party_closure(pony_ctx_t **ctx,
   return (value_t){.p = fmap(ctx, fm->fn, p, get_rtype(fm))};
 }
 
-static inline par_t* fmap_run_fp(pony_ctx_t **ctx, par_t* in, fmap_s* const f){
-  closure_t *cp = closure_mk(ctx, fmap_party_closure, f, NULL, NULL);
-  future_t *fut = future_chain_actor(ctx, in->data.fp.fut, &party_type, cp);
-  return new_par_fp(ctx, fut, &future_type);
-}
-
-static inline par_t* fmap_run_v(pony_ctx_t **ctx, par_t* in, fmap_s* const f){
-  value_t v = closure_call(ctx, f->fn, (value_t[]){in->data.v.val});
-  return new_par_v(ctx, v, get_rtype(f));
-}
-
-static inline par_t* fmap_run_f(pony_ctx_t **ctx, par_t * in, fmap_s * const f){
-  future_t* chained_fut = future_chain_actor(ctx, in->data.f.fut, get_rtype(f), f->fn);
-  return new_par_f(ctx, chained_fut, &future_type);
-}
-
-static inline par_t* fmap_run_array(pony_ctx_t **ctx, par_t * in, fmap_s * const f){
+static inline par_t* fmap_run_array(pony_ctx_t **ctx, par_t * in,
+                                    closure_t* const clos,
+                                    pony_type_t const * const type){
   array_t* old_array = in->data.a.array;
   size_t size = array_size(old_array);
-  pony_type_t* type = get_rtype(f);
   array_t* new_array = array_mk(ctx, size, type);
-  closure_t* clos = f->fn;
 
   for(size_t i = 0; i < size; i++){
     value_t value = array_get(old_array, i);
@@ -334,24 +318,90 @@ static inline par_t* fmap_run_array(pony_ctx_t **ctx, par_t * in, fmap_s * const
  *  @return a pointer to a new parallel collection of \p rtype runtime type
  */
 
+#define LIST_PUSH(lst, par) {lst = list_push((lst), ((value_t) { .p = (par) }));}
+#define LIST_POP(lst, par)  {lst = list_pop((lst), (value_t*)&(par));}
+
 static par_t* fmap(pony_ctx_t** ctx, closure_t* const f, par_t* in,
                    pony_type_t const * const rtype){
-  fmap_s *fm = (fmap_s*) encore_alloc(*ctx, sizeof* fm);
-  *fm = (fmap_s){.fn = f, .rtype=rtype};
-  switch(in->tag){
-  case EMPTY_PAR: return new_par_empty(ctx, rtype);
-  case VALUE_PAR: return fmap_run_v(ctx, in, fm);
-  case FUTURE_PAR: return fmap_run_f(ctx, in, fm);
-  case PAR_PAR: {
-    // TODO: may consume all the stack! FIX!
-    par_t* left = fmap(ctx, f, in->data.p.left, rtype);
-    par_t* right = fmap(ctx, f, in->data.p.right, rtype);
-    return new_par_p(ctx, left, right, &party_type);
+  list_t *tmp_lst = NULL;
+  list_t *par_values = NULL;
+
+  // Depth-first traversal
+  // Push new ParT nodes to a stack
+  while (in){
+    switch(in->tag){
+      case EMPTY_PAR: {
+        LIST_PUSH(par_values, (new_par_empty(ctx, rtype)));
+        LIST_POP(tmp_lst, in);
+      }
+
+      case VALUE_PAR: {
+        value_t v = closure_call(ctx, f, (value_t[]) {in->data.v.val});
+        LIST_PUSH(par_values, new_par_v(ctx, v, rtype));
+        LIST_POP(tmp_lst, in);
+        break;
+      }
+
+      case FUTURE_PAR: {
+        future_t* chained_fut = future_chain_actor(ctx, in->data.f.fut, rtype, f);
+        LIST_PUSH(par_values, new_par_f(ctx, chained_fut, &future_type));
+        LIST_POP(tmp_lst, in);
+        break;
+      }
+
+      case PAR_PAR: {
+        LIST_PUSH(tmp_lst, in->data.p.right);
+        in = in->data.p.left;
+        break;
+      }
+
+      case FUTUREPAR_PAR: {
+        fmap_s *fm = (fmap_s*) encore_alloc(*ctx, sizeof* fm);
+        *fm = (fmap_s){.fn = f, .rtype=rtype};
+
+        closure_t *cp = closure_mk(ctx, fmap_party_closure, fm, NULL, NULL);
+        future_t *fut = future_chain_actor(ctx, in->data.fp.fut, &party_type, cp);
+        LIST_PUSH(par_values, new_par_fp(ctx, fut, &future_type));
+        LIST_POP(tmp_lst, in);
+        break;
+      }
+
+      case ARRAY_PAR: {
+        LIST_PUSH(par_values, fmap_run_array(ctx, in, f, rtype));
+        LIST_POP(tmp_lst, in);
+        break;
+      }
+      default: exit(-1);
+    }
   }
-  case FUTUREPAR_PAR: return fmap_run_fp(ctx, in, fm);
-  case ARRAY_PAR: return fmap_run_array(ctx, in, fm);
-  default: exit(-1);
+
+  // Pair ParT nodes. builds a balanced tree in O(2 * n)
+  par_t * current = NULL, * prev_par = NULL;
+  list_t * helper_lst = NULL;
+  size_t counter = 0;
+  LIST_POP(par_values, current);
+  while(current){
+
+    if(counter % 2 == 0) {
+      // this is a prev_node (left node)
+      prev_par = current;
+    } else {
+      par_t *node = new_par_p(ctx, prev_par, current, &party_type);
+      LIST_PUSH(helper_lst, node);
+    }
+    ++counter;
+
+    LIST_POP(par_values, current);
+
+    if (current == NULL){
+      par_values = helper_lst;
+      helper_lst = NULL;
+      counter = 0;
+
+      LIST_POP(par_values, current);
+    }
   }
+  return prev_par;
 }
 
 par_t* party_sequence(pony_ctx_t **ctx, par_t* p, closure_t* const f,
