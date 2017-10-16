@@ -4,21 +4,26 @@
 #include "encore.h"
 #include <array.h>
 
-typedef struct par_t par_t;
 extern pony_type_t party_type;
 
-void party_trace(pony_ctx_t*, void*);
+typedef struct par_t par_t;
+typedef struct closure_t delay_t;
+typedef struct ASTPar_t ASTPar_t;
+typedef struct ExprCombinator_t ASTNode_t;
 
+void party_trace(pony_ctx_t*, void*);
 pony_type_t* party_get_type(par_t * const p);
 
+
+/**
+ *  Constructor of ParT types
+ */
 par_t* new_par_empty(pony_ctx_t **ctx, pony_type_t const * const rtype);
 par_t* new_par_v(pony_ctx_t **ctx, encore_arg_t val, pony_type_t const * const rtype);
 par_t* new_par_f(pony_ctx_t **ctx,future_t* const fut, pony_type_t const * const rtype);
 par_t* new_par_p(pony_ctx_t **ctx, par_t* const p1, par_t* const p2, pony_type_t const * const rtype);
 par_t* new_par_fp(pony_ctx_t **ctx, future_t* const f, pony_type_t const * const rtype);
 par_t* new_par_array(pony_ctx_t **ctx, array_t* arr, pony_type_t const * const rtype);
-
-/* par_t* new_par_join(par_t* const p, pony_type_t const * const rtype); */
 
 /**
  *  sequence :: Par t -> (t -> t') -> Par t'
@@ -166,4 +171,33 @@ par_t* party_zip_with(pony_ctx_t **ctx,
                       pony_type_t *type);
 
 
+ASTPar_t*
+new_delay_par(pony_ctx_t **ctx, delay_t * const val, pony_type_t const * const rtype);
+
+ASTPar_t*
+delay_sequence(pony_ctx_t **ctx, ASTPar_t *p, closure_t* const closure, pony_type_t const * const rtype);
+
+ASTPar_t*
+delay_join(pony_ctx_t **ctx, ASTPar_t *p);
+
+par_t*
+delay_extract(pony_ctx_t **ctx, ASTPar_t *p);
+
+ASTPar_t*
+delay_each(pony_ctx_t **ctx, delay_t * const val);
+
+ASTPar_t*
+delay_reduce(pony_ctx_t **ctx, ASTPar_t * const p, encore_arg_t init,
+             closure_t * const closure, pony_type_t * type);
+
+ASTPar_t*
+delay_intersection(pony_ctx_t **ctx, ASTPar_t *par_left, ASTPar_t *par_right,
+                   closure_t *cmp, pony_type_t *type);
+
+ASTPar_t*
+delay_distinct(pony_ctx_t **ctx, ASTPar_t *par, closure_t *cmp, pony_type_t *type);
+
+ASTPar_t*
+delay_zip_with(pony_ctx_t **ctx, ASTPar_t *pl, ASTPar_t *pr,
+               closure_t *fn, pony_type_t *type);
 #endif
