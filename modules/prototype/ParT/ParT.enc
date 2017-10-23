@@ -485,3 +485,9 @@ fun each[t](arr: [t]): Par[t]
     new_par_array(_ctx, #{arr}, _enc__type_t);
   END
 end
+
+fun cache[t](p : Par[t]): Par[t]
+  EMBED (Par[t])
+    delay_cache(_ctx, #{p});
+  END
+end

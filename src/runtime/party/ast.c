@@ -314,7 +314,19 @@ new_two_par_source_ast(pony_ctx_t **ctx, delayed_par_t *ast_left, delayed_par_t 
   return ast_node;
 }
 
+delayed_par_t*
+delay_cache_realised_part(pony_ctx_t **ctx, delayed_par_t *par)
 {
+  (void) ctx;
+  return par;
+}
+
+delayed_par_t*
+delay_cache_ast(pony_ctx_t **ctx, delayed_par_t *ast)
+{
+  (void) ctx;
+  __atomic_test_and_set((void*)ast->cached, __ATOMIC_RELAXED);
+  return ast;
 }
 
 delayed_par_t*
