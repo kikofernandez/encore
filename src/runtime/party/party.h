@@ -5,13 +5,15 @@
 #include <array.h>
 
 extern pony_type_t party_type;
+extern pony_type_t party_delay_type;
 
 typedef struct par_t par_t;
 typedef struct closure_t delay_t;
 typedef struct ast_delay_t ast_delay_t;
-typedef struct ast_node_t ast_node_t;
+typedef struct delayed_par_t delayed_par_t;
 
 void party_trace(pony_ctx_t*, void*);
+void party_delay_trace(pony_ctx_t*, void*);
 pony_type_t* party_get_type(par_t * const p);
 
 
@@ -171,6 +173,9 @@ par_t* party_zip_with(pony_ctx_t **ctx,
                       pony_type_t *type);
 
 
+par_t*
+run_delay_par(pony_ctx_t **ctx, delayed_par_t *p);
+
 // Creates a delayed ParT whose value can be delayed or realised, based on type information
 #define new_delay_par(ctx, VAL, runtime_type)  _Generic((VAL), \
            par_t * : new_delayed_realised_par, \
@@ -178,38 +183,51 @@ par_t* party_zip_with(pony_ctx_t **ctx,
            default: new_delayed_par            \
           )(ctx, VAL, runtime_type)
 
-ast_node_t*
+
+delayed_par_t*
 new_delayed_par(pony_ctx_t **ctx, delay_t * const val, pony_type_t const * const rtype);
 
-ast_node_t*
+delayed_par_t*
 new_delayed_realised_par(pony_ctx_t **ctx, par_t * const par, pony_type_t const * const type);
 
 // DELAY PART: combinators that extend the AST nodes given as input
 
-ast_node_t*
-delay_sequence(pony_ctx_t **ctx, ast_node_t *ast, closure_t* const closure, pony_type_t const * const rtype);
+#define delay_cache(ctx, VAL)  _Generic((VAL),  \
+           par_t * : delay_cache_realised_part, \
+           delay_t * : delay_cache_ast,         \
+           default: delay_cache_ast             \
+          )(ctx, VAL, runtime_type)
 
-ast_node_t*
-delay_join(pony_ctx_t **ctx, ast_node_t *ast);
+delayed_par_t*
+delay_cache_realised_part(pony_ctx_t **ctx, delayed_par_t *ast);
 
-ast_node_t*
+delayed_par_t*
+delay_cache_ast(pony_ctx_t **ctx, delayed_par_t *ast);
+
+delayed_par_t*
+delay_sequence(pony_ctx_t **ctx, delayed_par_t *ast, closure_t* const closure, pony_type_t const * const rtype);
+
+delayed_par_t*
+delay_join(pony_ctx_t **ctx, delayed_par_t *ast);
+
+delayed_par_t*
 delay_each(pony_ctx_t **ctx, delay_t * const val, pony_type_t const * const type);
 
-/* par_t* */
-/* delay_extract(pony_ctx_t **ctx, ast_node_t *p); */
+par_t*
+delay_extract(pony_ctx_t **ctx, delayed_par_t *p);
 
-ast_node_t*
-delay_reduce(pony_ctx_t **ctx, ast_node_t * const ast, encore_arg_t init,
+delayed_par_t*
+delay_reduce(pony_ctx_t **ctx, delayed_par_t * const ast, encore_arg_t init,
              closure_t * const closure, pony_type_t * type);
 
-ast_node_t*
-delay_intersection(pony_ctx_t **ctx, ast_node_t *par_left, ast_node_t *par_right,
+delayed_par_t*
+delay_intersection(pony_ctx_t **ctx, delayed_par_t *par_left, delayed_par_t *par_right,
                    closure_t *cmp, pony_type_t *type);
 
-ast_node_t*
-delay_distinct(pony_ctx_t **ctx, ast_node_t *par, closure_t *cmp, pony_type_t *type);
+delayed_par_t*
+delay_distinct(pony_ctx_t **ctx, delayed_par_t *par, closure_t *cmp, pony_type_t *type);
 
-ast_node_t*
-delay_zip_with(pony_ctx_t **ctx, ast_node_t *pl, ast_node_t *pr,
+delayed_par_t*
+delay_zip_with(pony_ctx_t **ctx, delayed_par_t *pl, delayed_par_t *pr,
                closure_t *fn, pony_type_t *type);
 #endif

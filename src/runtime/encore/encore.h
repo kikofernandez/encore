@@ -63,7 +63,8 @@ typedef enum {
   ID_OPTION,
   ID_TUPLE,
   ID_RANGE,
-  ID_PARTY
+  ID_PARTY,
+  ID_DELAY_PARTY
 } encore_type_id;
 
 typedef enum {
