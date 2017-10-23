@@ -176,6 +176,7 @@ party_delay_expr_trace(pony_ctx_t *ctx, void *p)
   encore_trace_object(ctx, par, party_trace);
 }
 
+// TODO: finish other cases!
 void party_delay_trace(pony_ctx_t* ctx, void* p)
 {
   assert(p);
