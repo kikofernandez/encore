@@ -487,7 +487,10 @@ fun each[t](arr: [t]): Par[t]
 end
 
 fun cache[t](p : Par[t]): Par[t]
+  -- Par[t] in C is `par_t *`, but it should really be a `delay_par_t*`.
+  -- this function will work as soon as we more from the former to the later.
   EMBED (Par[t])
-    delay_cache(_ctx, #{p});
+    -- delay_cache(_ctx, #{p});
+    NULL;
   END
 end

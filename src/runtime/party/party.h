@@ -199,7 +199,7 @@ new_delayed_par_merge(pony_ctx_t **ctx, delayed_par_t *d1, delayed_par_t *d2, po
            par_t * : delay_cache_realised_part, \
            delay_t * : delay_cache_ast,         \
            default: delay_cache_ast             \
-          )(ctx, VAL, runtime_type)
+          )(ctx, VAL)
 
 delayed_par_t*
 delay_cache_realised_part(pony_ctx_t **ctx, delayed_par_t *ast);
