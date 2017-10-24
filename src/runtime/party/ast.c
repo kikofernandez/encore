@@ -90,23 +90,25 @@ typedef enum AST_PAR_FLAG
 */
 // TODO: should linear be an enum mode: LINEAR, ACTOR, READ (no other mode makes sense in the ParT)
 #define DEFINE_AST(NAME) \
-    enum AST_COMBINATOR tag; \
-    bool linear; \
     closure_t * expr; \
     pony_type_t * type; \
     delayed_par_t *NAME; \
     value_t result; \
+    enum AST_COMBINATOR tag; \
+    bool linear; \
+
 
 typedef struct ast_delay_t
 {
   delay_t *expr;
-  pony_type_t const * const type;
+  pony_type_t const * type;
   bool linear;
 } ast_delay_t;
 
 typedef struct ast_expr_t
 {
   DEFINE_AST(ast)
+  char padding[3];
 } ast_expr_t;
 
 typedef struct ast_reduce_t
@@ -117,8 +119,9 @@ typedef struct ast_reduce_t
 
 typedef struct ast_two_par_tsource_t
 {
-  DEFINE_AST(left)
   delayed_par_t *right;
+  DEFINE_AST(left)
+  char padding[3];
 } ast_two_par_tsource_t;
 
 typedef struct ast_delay_par_t
@@ -129,14 +132,6 @@ typedef struct ast_delay_par_t
 } ast_delay_par_t;
 
 typedef struct delayed_par_t {
-    // indicates how to treat the v
-    AST_PAR_FLAG flag;
-    bool cached;
-    char padding[3];
-
-    // runtime type of the result produced by the AST node. NOT the tracing type!
-    pony_type_t *type;
-
     union ParT {
       /*
        * COMBINATOR AST NODES
@@ -163,6 +158,15 @@ typedef struct delayed_par_t {
       // a realised ParT value: v_1 || v_2
       par_t *par;
     } v;
+
+    // runtime type of the result produced by the AST node. NOT the tracing type!
+    pony_type_t *type;
+
+    // indicates how to treat the v
+    AST_PAR_FLAG flag;
+
+    bool cached;
+    char padding[3]; // unused
 } delayed_par_t;
 
 // TODO: extend party_trace() to deal with delayed_parties.
