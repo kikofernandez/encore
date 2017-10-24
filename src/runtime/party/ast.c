@@ -1,6 +1,6 @@
 #include "party.h"
 #include <assert.h>
-#include "list.c"
+#include "list.h"
 
 // All Expression combinators have always a source (ParT) and
 // a transformation function (lambda). Based on the tag, cast
@@ -274,27 +274,8 @@ ast_get_type(delayed_par_t *ast)
    *ast_node = (delayed_par_t) {.flag = FLAG, \
                                 .cached = false, \
                                 .type = TYPE, \
+                                .v = { (void*) SOURCE },        \
                                 __VA_ARGS__}; \
-   switch(FLAG){ \
-     case AST_EXPR_TWO_PAR_SRC: { \
-       *ast_node = (delayed_par_t) {.v = {.ast_twosource = (void*) SOURCE}}; break; \
-     }\
-     case AST_EXPR_REDUCE: { \
-       *ast_node = (delayed_par_t) {.v = {.ast_reduce = (void*) SOURCE}}; break; \
-     } \
-     case AST_EXPR_PAR: { \
-       *ast_node = (delayed_par_t) {.v = {.ast_expr = (void*) SOURCE}}; break; \
-     } \
-     case AST_DELAY_TREE: { \
-       *ast_node = (delayed_par_t) {.v = {.ast_tree = (void*) SOURCE}}; break; \
-     } \
-     case AST_DELAY_PAR_VALUE: { \
-       *ast_node = (delayed_par_t) {.v = {.ast_expr = (void*) SOURCE}}; break; \
-     } \
-     case AST_PAR_VALUE: { \
-       *ast_node = (delayed_par_t) {.v = {.par = (void*) SOURCE}}; break; \
-     } \
-   }\
    ast_node; \
 }) \
 
