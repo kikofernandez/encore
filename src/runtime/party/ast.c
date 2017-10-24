@@ -44,18 +44,7 @@ typedef enum AST_COMBINATOR {
   AST_C_ZIP
 } AST_COMBINATOR;
 
-/* typedef enum AST_VAL */
-/* { */
-/*   VAL, */
-/*   FUTURE, */
-/*   FUTUREPAR, */
-/*   PAR, */
-/*   ARRAY */
-/* } AST_VAL; */
-
-// depending on this flag, the tracing function casts the `ast_expr_t`
-// in `delayed_par_t` to the appropriate AST node.
-// TODO: I believe this could be internal to the struct, not internal to the file
+// NOTE: I believe this could be internal to the struct, not internal to the file
 //       (easier to reason about)
 typedef enum AST_PAR_FLAG
 {
@@ -88,7 +77,8 @@ typedef enum AST_PAR_FLAG
    a way to attach / communicate that the result is ready.
 
 */
-// TODO: should linear be an enum mode: LINEAR, ACTOR, READ (no other mode makes sense in the ParT)
+
+// NOTE: should linear be an enum mode: LINEAR, ACTOR, READ (only these modes make sense in the ParT)
 #define DEFINE_AST(NAME) \
     closure_t * expr; \
     pony_type_t * type; \
@@ -96,7 +86,6 @@ typedef enum AST_PAR_FLAG
     value_t result; \
     enum AST_COMBINATOR tag; \
     bool linear; \
-
 
 typedef struct ast_delay_t
 {
@@ -154,6 +143,7 @@ typedef struct delayed_par_t {
       // a ParT value that has been delayed: delay(f())
       ast_delay_t *ast_par;
 
+      // a delay ParT merged: (delayed_par_t AST1) || (delayed_par_t AST2)
       ast_delay_par_t *ast_tree;
 
       // a realised ParT value: v_1 || v_2
@@ -163,9 +153,20 @@ typedef struct delayed_par_t {
     // runtime type of the result produced by the AST node. NOT the tracing type!
     pony_type_t *type;
 
-    // indicates how to treat the v
+    // indicates how to treat the union, a.k.a. `v`
     AST_PAR_FLAG flag;
 
+    // a cached delay ParT keeps the intermediate result, e.g. does not
+    // perform an optimisation. e.g.
+    //
+    //    val p2 = cache(p >> e1)
+    //    val p3 = p2 >> e2
+    //    val p4 = p2 >> e3
+    //
+    // the result of p2 will be saved. if not, p2 >> e2 and p2 >> e3
+    // run the same initial computation twice, p >> e1. this is similar
+    // to Spark RDDs and Sparks in Haskell.
+    //
     bool cached;
     char padding[3]; // unused
 } delayed_par_t;
@@ -188,7 +189,6 @@ pony_type_t party_delay_type =
   astExpr; \
 }) \
 
-// TODO: finish other cases!
 void party_delay_trace(pony_ctx_t* ctx, void* p)
 {
   assert(p);
@@ -207,20 +207,20 @@ void party_delay_trace(pony_ctx_t* ctx, void* p)
     case AST_EXPR_REDUCE: {
       ast_reduce_t *astExpr = trace_ast(ast_reduce_t, ast->v.ast_reduce, ast);
 
-      // TODO: trace of the runtime type so that it is not collected?
+      // NOTE: trace of the runtime type so that it is not collected?
       pony_trace(ctx, &astExpr->initType);
 
-      // TODO: is it like this?
+      // NOTE: is it like this?
       encore_trace_object(ctx, astExpr->init.p, astExpr->initType->trace);
       break;
     }
     case AST_DELAY_PAR_VALUE: {
       ast_delay_t *delay = ast->v.ast_par;
 
-      // TODO: trace of the runtime type so that it is not collected?
+      // NOTE: trace of the runtime type so that it is not collected?
       pony_trace(ctx, &delay->type);
 
-      // TODO: check if this is correct.
+      // NOTE: check if this is correct.
       encore_trace_object(ctx, delay->expr, closure_trace);
       break;
     }
@@ -239,7 +239,7 @@ void party_delay_trace(pony_ctx_t* ctx, void* p)
 static inline pony_type_t*
 ast_get_type(delayed_par_t *ast)
 {
-  // TODO: maintain the assert to check that the refactorings are still correct.
+  // NOTE: maintain the assert to check that the refactorings are still correct.
   switch(ast->flag)
   {
     case AST_EXPR_PAR: {
@@ -337,7 +337,6 @@ new_expr_ast(pony_ctx_t **ctx, delayed_par_t *ast, closure_t* const closure,
                              .expr = closure,
                              .type = rtype,
                              .ast = ast};
-
   return new_delay_par(AST_EXPR_PAR, rtype, expr_node);
 }
 
@@ -352,13 +351,13 @@ new_two_par_source_ast(pony_ctx_t **ctx, delayed_par_t *ast_left, delayed_par_t 
                                         .type = type,
                                         .left = ast_left,
                                         .right = ast_right};
-
   return new_delay_par(AST_EXPR_TWO_PAR_SRC, type, expr_node);
 }
 
 delayed_par_t*
 delay_cache_realised_part(pony_ctx_t **ctx, delayed_par_t *par)
 {
+  // The ParT is already a value, nothing to do.
   (void) ctx;
   return par;
 }
@@ -410,11 +409,12 @@ delay_each(pony_ctx_t **ctx, delay_t * const val, pony_type_t const * const type
   par_t *par = NULL; \
   do { \
     ast_delay_t *delay_value = AST->v.ast_par;                     \
-    par =  (par_t*) closure_call(&ctx, (closure_t*) delay_value->expr, (value_t[]){}).p; \
+    par = (par_t*) closure_call(&ctx, (closure_t*) delay_value->expr, (value_t[]){}).p; \
   } while (0); \
   par; \
-})
+}) \
 
+// TODO: (kiko) run and interpret delayed ParTs
 par_t*
 run_delay_par(pony_ctx_t **ctx, delayed_par_t *p)
 {
@@ -475,6 +475,7 @@ run_delay_par(pony_ctx_t **ctx, delayed_par_t *p)
 /*   } */
 /* } */
 
+// TODO: (kiko) on extract, interpret the AST nodes.
 par_t*
 delay_extract(pony_ctx_t **ctx, delayed_par_t *ast)
 {
@@ -510,7 +511,7 @@ delay_extract(pony_ctx_t **ctx, delayed_par_t *ast)
   return NULL;
 }
 
-// TODO: `init` is a realised value. is there any advantage / use case for a
+// NOTE: `init` is a realised value. is there any advantage / use case for a
 //       delayed init value, e.g. init = delay(p)?
 delayed_par_t*
 delay_reduce(pony_ctx_t **ctx, delayed_par_t * const ast, encore_arg_t init,
@@ -525,7 +526,6 @@ delay_reduce(pony_ctx_t **ctx, delayed_par_t * const ast, encore_arg_t init,
                                .ast = ast,
                                .init = init,
                                .initType = initType };
-
   return new_delay_par(AST_EXPR_REDUCE, resultType, expr_node);
 }
 
