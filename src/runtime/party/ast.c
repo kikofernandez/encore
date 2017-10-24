@@ -59,9 +59,9 @@ typedef enum AST_COMBINATOR {
 //       (easier to reason about)
 typedef enum AST_PAR_FLAG
 {
-  AST_EXPR_PAR, // Matches ast_expr_t* in `par_expr`
-  AST_EXPR_TWO_PAR_SRC, // Matches ast_two_par_tsource_t* in `par_expr`
-  AST_EXPR_REDUCE, // Matches ast_reduce_t* in `par_expr`
+  AST_EXPR_PAR, // Matches ast_expr_t* in `v`
+  AST_EXPR_TWO_PAR_SRC, // Matches ast_two_par_tsource_t* in `v`
+  AST_EXPR_REDUCE, // Matches ast_reduce_t* in `v`
   AST_DELAY_PAR_VALUE, // Matches a ast_delay_t* value, i.e. delay
   AST_PAR_VALUE      // Matches a par_t* that is not "delayed"
 } AST_PAR_FLAG;
@@ -88,62 +88,46 @@ typedef enum AST_PAR_FLAG
 
 */
 // TODO: should linear be an enum mode: LINEAR, ACTOR, READ (no other mode makes sense in the ParT)
-#define DEFINE_AST \
+#define DEFINE_AST(NAME) \
     enum AST_COMBINATOR tag; \
     bool linear; \
     closure_t * expr; \
     pony_type_t * type; \
-    delayed_par_t *ast; \
+    delayed_par_t *NAME; \
     value_t result; \
 
-typedef struct ast_single_delay_t
+typedef struct ast_delay_t
 {
   delay_t *expr;
   pony_type_t const * const type;
   bool linear;
-} ast_single_delay_t;
-
-typedef struct ast_multi_delay_t
-{
-  pony_type_t const * const type;
-  ast_delay_t *left;
-  ast_delay_t *right;
-} ast_multi_delay_t;
-
-typedef struct ast_delay_t
-{
-  // DELAY_V_SINGLE: represents a single `delay(f())`
-  // DELAY_V_MULTI: represents a `(ast_delay_t e1) || (ast_delay_t e2)`
-  // DELAY_V_AST: represents a `delayed_par_t`, e.g. `((ast_delay_t e1) >> e2) || (ast_delay_t e3)
-  //   basically a delayed ParT made of single AST delayed computations +
-  //   `delayed_par_t`, AST nodes that contains the lineage of the ParT lazy computation.
-  enum {DELAY_V_SINGLE, DELAY_V_MULTI, DELAY_V_AST} ast_delay_value_tag;
-  union {
-    ast_single_delay_t *single;
-    ast_multi_delay_t *multi;
-    delayed_par_t *delayed;
-  } delay_par;
 } ast_delay_t;
 
 typedef struct ast_expr_t
 {
-  DEFINE_AST
+  DEFINE_AST(ast)
 } ast_expr_t;
 
 typedef struct ast_reduce_t
 {
-  DEFINE_AST
+  DEFINE_AST(ast)
   encore_arg_t init; // TODO: this is a realised value. should it be delayed?
 } ast_reduce_t;
 
 typedef struct ast_two_par_tsource_t
 {
-  DEFINE_AST
-  delayed_par_t *ast_par;
+  DEFINE_AST(left)
+  delayed_par_t *right;
 } ast_two_par_tsource_t;
 
+typedef struct ast_delay_par_t
+{
+  delayed_par_t *left;
+  delayed_par_t *right;
+} ast_delay_par_t;
+
 typedef struct delayed_par_t {
-    // indicates how to treat the par_expr
+    // indicates how to treat the v
     AST_PAR_FLAG flag;
     bool cached;
     char padding[3];
@@ -152,17 +136,35 @@ typedef struct delayed_par_t {
     pony_type_t *type;
 
     union ParT {
-      // another combinator AST node
+      /*
+       * COMBINATOR AST NODES
+       */
+
+      // single AST combinators, e.g. >> or filter
       struct ast_expr_t *ast_expr;
+
+      // reduce combinator as AST
       struct ast_reduce_t *ast_reduce;
+
+      // combinators that take two AST sources, e.g. zip
       struct ast_two_par_tsource_t *ast_twosource;
 
-      // a ParT value that has been delayed
-      ast_delay_t *ast_par; // delay(f())   -- single delayed computation
+      /*
+       * VALUES AS DELAYED COMPUTATIONS
+       */
 
-      // a realised ParT value
-      par_t *par;  // v_1 || v_2
-    } par_expr;
+      // a ParT value that has been delayed: delay(f())
+      ast_delay_t *ast_par; //
+      // TODO: what about:
+      // ast_delayed_par_t ast_par;
+      // struct ast_delayed_par_t {
+      //   delayed_par_t *left;
+      //   delayed_par_t *right;
+      // }
+
+      // a realised ParT value: v_1 || v_2
+      par_t *par;
+    } v;
 } delayed_par_t;
 
 // TODO: extend party_trace() to deal with delayed_parties.
@@ -220,69 +222,79 @@ ast_get_type(delayed_par_t *ast)
   switch(ast->flag)
   {
     case AST_EXPR_PAR: {
-      assert(ast->type == ast->par_expr.ast_expr->type);
-      return ast->par_expr.ast_expr->type;
+      assert(ast->type == ast->v.ast_expr->type);
+      return ast->v.ast_expr->type;
     }
     case AST_EXPR_TWO_PAR_SRC: {
-      assert(ast->type == ast->par_expr.ast_twosource->type);
-      return ast->par_expr.ast_twosource->type;
+      assert(ast->type == ast->v.ast_twosource->type);
+      return ast->v.ast_twosource->type;
     }
     case AST_EXPR_REDUCE: {
-      assert(ast->type == ast->par_expr.ast_reduce->type);
-      return ast->par_expr.ast_reduce->type;
+      assert(ast->type == ast->v.ast_reduce->type);
+      return ast->v.ast_reduce->type;
     }
     case AST_DELAY_PAR_VALUE: {
-      // delayed type containing a single AST or multiple `AST || AST` glue together
-      switch (ast->par_expr.ast_par->ast_delay_value_tag){
-        case DELAY_V_SINGLE: {
-          assert(ast->type == ast->par_expr.ast_par->delay_par.single->type;);
-          return ast->par_expr.ast_par->delay_par.single->type;
-        }
-        case DELAY_V_MULTI: {
-          assert(ast->type == ast->par_expr.ast_par->delay_par.multi->type;);
-          return ast->par_expr.ast_par->delay_par.multi->type;
-        }
-        case DELAY_V_AST: {
-          return ast->type;
-        }
-      }
+      assert(ast->type == ast->v.ast_par->type);
+      return ast->v.ast_par->type;
     }
     case AST_PAR_VALUE: {
-      assert(ast->type == party_get_type(ast->par_expr.par);
-      return party_get_type(ast->par_expr.par);
+      assert(ast->type == party_get_type(ast->v.par));
+      return party_get_type(ast->v.par);
     }
   }
 }
 
+#define new_delay_par(FLAG, TYPE, SOURCE, ...) ({ \
+   delayed_par_t *ast_node = encore_alloc(*ctx, sizeof* ast_node); \
+   *ast_node = (delayed_par_t) {.flag = FLAG, \
+                                .cached = false, \
+                                .type = TYPE, \
+                                __VA_ARGS__}; \
+   switch(FLAG){ \
+     case AST_EXPR_TWO_PAR_SRC: { \
+       *ast_node = (delayed_par_t) {.v = {.ast_twosource = (void*) SOURCE}}; break; \
+     }\
+     case AST_EXPR_REDUCE: { \
+       *ast_node = (delayed_par_t) {.v = {.ast_reduce = (void*) SOURCE}}; break; \
+     } \
+     case AST_EXPR_PAR: { \
+       *ast_node = (delayed_par_t) {.v = {.ast_expr = (void*) SOURCE}}; break; \
+     } \
+     case AST_DELAY_PAR_VALUE: { \
+       *ast_node = (delayed_par_t) {.v = {.ast_expr = (void*) SOURCE}}; break; \
+     } \
+     case AST_PAR_VALUE: { \
+       *ast_node = (delayed_par_t) {.v = {.par = (void*) SOURCE}}; break; \
+     } \
+   }\
+   ast_node; \
+}) \
+
 delayed_par_t*
-new_delayed_realised_par(pony_ctx_t **ctx, par_t * const par, pony_type_t const * const type)
+new_delayed_realised_par_value(pony_ctx_t **ctx, par_t * const par, pony_type_t const * const type)
 {
-  delayed_par_t * expr = encore_alloc(*ctx, sizeof* expr);
-  *expr = (delayed_par_t) {.flag = AST_PAR_VALUE,
-                           .type = type,
-                           .par_expr = {.par = par }};
-  return expr;
+  return new_delay_par(AST_PAR_VALUE, type, par);
 }
 
 // TODO: pass in the mode
 delayed_par_t*
-new_delayed_par(pony_ctx_t **ctx, delay_t * const val, pony_type_t const * const rtype)
+new_delayed_par_value(pony_ctx_t **ctx, delay_t * const val, pony_type_t const * const rtype)
 {
-  ast_single_delay_t *const single = encore_alloc(*ctx, sizeof* single);
-  *single = (ast_single_delay_t){.expr = val, .type = rtype, .linear=false};
+  ast_delay_t *const delay_expr = encore_alloc(*ctx, sizeof* delay_expr);
+  *delay_expr = (ast_delay_t){.expr = val, .type = rtype, .linear=false};
+  return new_delay_par(AST_DELAY_PAR_VALUE, rtype, delay_expr);
+}
 
-  ast_delay_t * const delay_expr = encore_alloc(*ctx, sizeof* delay_expr);
-  *delay_expr = (ast_delay_t) {.ast_delay_value_tag=DELAY_V_SINGLE,
-                               .delay_par = {.single = single}
-                              };
-
-  delayed_par_t * const expr = encore_alloc(*ctx, sizeof* expr);
-  *expr = (delayed_par_t) {.flag = AST_DELAY_PAR_VALUE,
-                           .cached = false,
-                           .type = rtype,
-                           .par_expr = {.ast_par = delay_expr }
-                          };
-  return expr;
+delayed_par_t*
+new_delayed_par_merge(pony_ctx_t **ctx, delayed_par_t d1,
+                      delayed_par_t d2, pony_type_t const * const rtype)
+{
+  // TODO: finish!
+  (void) ctx;
+  (void) d1;
+  (void) d2;
+  (void) rtype;
+  return NULL;
 }
 
 static inline delayed_par_t*
@@ -296,12 +308,7 @@ new_expr_ast(pony_ctx_t **ctx, delayed_par_t *ast, closure_t* const closure,
                              .type = rtype,
                              .ast = ast};
 
-  delayed_par_t *delayed_par = encore_alloc(*ctx, sizeof* delayed_par);
-  *delayed_par = (delayed_par_t) {.flag = AST_EXPR_PAR,
-                                  .type = rtype,
-                                  .cached = false,
-                                  .par_expr = {.ast_expr = expr_node}};
-  return delayed_par;
+  return new_delay_par(AST_EXPR_PAR, rtype, expr_node);
 }
 
 // TODO: `init` is a realised value. is there any advantage / use case for a
@@ -318,12 +325,7 @@ new_reduce_ast(pony_ctx_t **ctx, delayed_par_t *ast, closure_t* const closure,
                                .ast = ast,
                                .init = init };
 
-  delayed_par_t *ast_node = encore_alloc(*ctx, sizeof* ast_node);
-  *ast_node = (delayed_par_t) {.flag = AST_EXPR_REDUCE,
-                               .cached = false,
-                               .type = rtype,
-                               .par_expr = {.ast_reduce = expr_node}};
-  return ast_node;
+  return new_delay_par(AST_EXPR_REDUCE, rtype, expr_node);
 }
 
 static inline delayed_par_t*
@@ -335,14 +337,10 @@ new_two_par_source_ast(pony_ctx_t **ctx, delayed_par_t *ast_left, delayed_par_t 
                                         .linear = false,
                                         .expr = closure,
                                         .type = type,
-                                        .ast = ast_left,
-                                        .ast_par = ast_right};
-  delayed_par_t *ast_node = encore_alloc(*ctx, sizeof* ast_node);
-  *ast_node = (delayed_par_t) {.flag = AST_EXPR_TWO_PAR_SRC,
-                               .cached = false,
-                               .type = type,
-                               .par_expr = {.ast_twosource = expr_node}};
-  return ast_node;
+                                        .left = ast_left,
+                                        .right = ast_right};
+
+  return new_delay_par(AST_EXPR_TWO_PAR_SRC, type, expr_node);
 }
 
 delayed_par_t*
@@ -376,7 +374,7 @@ delay_join(pony_ctx_t **ctx, delayed_par_t *p)
 delayed_par_t*
 delay_each(pony_ctx_t **ctx, delay_t * const val, pony_type_t const * const type)
 {
-  delayed_par_t *ast = new_delay_par(ctx, val, type);
+  delayed_par_t *ast = new_delay_par_value(ctx, val, type);
   return new_expr_ast(ctx, ast, NULL, type, AST_C_EACH);
 }
 
@@ -398,49 +396,18 @@ delay_each(pony_ctx_t **ctx, delay_t * const val, pony_type_t const * const type
 #define run_delay_par_value(ctx, AST) ({         \
   par_t *par = NULL; \
   do { \
-    ast_delay_t *delay_value = AST->par_expr.ast_par;                     \
-    if (delay_value->ast_delay_value_tag == DELAY_V_SINGLE){ \
-      par =  (par_t*) closure_call(&ctx, (closure_t*) delay_value->delay_par.single->expr, (value_t[]){}).p; \
-    } else { \
-      run_delay_par_value_multi(ctx, delay_value->delay_par.multi);      \
-    } \
+    ast_delay_t *delay_value = AST->v.ast_par;                     \
+    par =  (par_t*) closure_call(&ctx, (closure_t*) delay_value->expr, (value_t[]){}).p; \
   } while (0); \
   par; \
 })
-
-
-static inline par_t*
-run_delay_par_value_multi(pony_ctx_t *ctx, ast_multi_delay_t *multi)
-{
-  ast_delay_t *iter = multi->left;
-  stack_s *stack = NULL;
-  pony_type_t *type = multi->type;
-  par_t *p = new_par_empty(&ctx, type);
-  STACK_PUSH(stack, multi->right);
-
-  while(iter){
-    if (iter->ast_delay_value_tag == DELAY_V_SINGLE){
-      par_t *p2 = (par_t*) closure_call(&ctx, (closure_t*) iter->delay_par.single->expr, (value_t[]){}).p;
-      p = new_par_p(&ctx, p, p2, type);
-      STACK_POP(stack, iter);
-
-      if(!iter){
-        return p;
-      }
-    } else {
-      STACK_PUSH(stack, iter->delay_par.multi->right);
-      iter = iter->delay_par.multi->left;
-    }
-  }
-  exit(-1);
-}
 
 par_t*
 run_delay_par(pony_ctx_t **ctx, delayed_par_t *p)
 {
   switch(p->flag){
   case AST_PAR_VALUE: {
-    return p->par_expr.par;
+    return p->v.par;
   }
   case AST_DELAY_PAR_VALUE: {
     return run_delay_par_value(*ctx, p);
@@ -476,7 +443,7 @@ run_delay_par(pony_ctx_t **ctx, delayed_par_t *p)
 /*       STACK_POP(stack, ast); */
 /*     } */
 /*     case AST_DELAY_PAR_VALUE: { */
-/*       ast_delay_t *delay_value = p->par_expr.ast_par; */
+/*       ast_delay_t *delay_value = p->v.ast_par; */
 /*       return (par_t*) closure_call(ctx, (closure_t*) delay_value->expr, (value_t[]){}).p; */
 /*     } */
 /*     case AST_EXPR_PAR: { */
@@ -498,7 +465,7 @@ delay_extract(pony_ctx_t **ctx, delayed_par_t *ast)
   while(ast){
     switch(ast->flag){
     case AST_PAR_VALUE: {
-      return party_extract(ctx, ast->par_expr.par, party_get_type(ast->par_expr.par));
+      return party_extract(ctx, ast->v.par, party_get_type(ast->v.par));
     }
     case AST_DELAY_PAR_VALUE: {
       return run_delay_par_value(*ctx, ast);
@@ -506,7 +473,7 @@ delay_extract(pony_ctx_t **ctx, delayed_par_t *ast)
     case AST_EXPR_PAR: {
       /* return interpret_ast_node(ctx, ast); */
       break;
-    /* ast_expr_t *expr = ast->par_expr.ast_expr; */
+    /* ast_expr_t *expr = ast->v.ast_expr; */
     /* par_t *p2 = run_delay_par(ctx, expr->ast); */
     /* par_t *p3 = party_sequence(ctx, p2, expr->expr, expr->type); */
     /* return p3; */

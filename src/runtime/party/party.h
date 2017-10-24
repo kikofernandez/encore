@@ -177,18 +177,21 @@ par_t*
 run_delay_par(pony_ctx_t **ctx, delayed_par_t *p);
 
 // Creates a delayed ParT whose value can be delayed or realised, based on type information
-#define new_delay_par(ctx, VAL, runtime_type)  _Generic((VAL), \
-           par_t * : new_delayed_realised_par, \
-           delay_t * : new_delayed_par,        \
-           default: new_delayed_par            \
+#define new_delay_par_value(ctx, VAL, runtime_type)  _Generic((VAL), \
+           par_t * : new_delayed_realised_par_value, \
+           delay_t * : new_delayed_par_value, \
+           default: new_delayed_par_value \
           )(ctx, VAL, runtime_type)
 
 
 delayed_par_t*
-new_delayed_par(pony_ctx_t **ctx, delay_t * const val, pony_type_t const * const rtype);
+new_delayed_par_value(pony_ctx_t **ctx, delay_t * const val, pony_type_t const * const rtype);
 
 delayed_par_t*
-new_delayed_realised_par(pony_ctx_t **ctx, par_t * const par, pony_type_t const * const type);
+new_delayed_realised_par_value(pony_ctx_t **ctx, par_t * const par, pony_type_t const * const type);
+
+delayed_par_t*
+new_delayed_par_merge(pony_ctx_t **ctx, delayed_par_t d1, delayed_par_t d2, pony_type_t const * const rtype);
 
 // DELAY PART: combinators that extend the AST nodes given as input
 
