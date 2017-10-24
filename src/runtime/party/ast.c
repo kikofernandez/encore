@@ -115,6 +115,7 @@ typedef struct ast_reduce_t
 {
   DEFINE_AST(ast)
   encore_arg_t init; // TODO: this is a realised value. should it be delayed?
+  pony_type_t *initType;
 } ast_reduce_t;
 
 typedef struct ast_two_par_tsource_t
@@ -177,19 +178,15 @@ pony_type_t party_delay_type =
   .trace=party_delay_trace
 };
 
-static inline void
-party_delay_expr_trace(pony_ctx_t *ctx, void *p)
-{
-  ast_expr_t *astExpr = (ast_expr_t*) p;
-  closure_trace(ctx, astExpr->expr);
-
-  pony_trace(ctx, &astExpr->type);
-
-  encore_trace_object(ctx, astExpr->ast, party_delay_type.trace);
-
-  par_t *par = astExpr->result.p;
-  encore_trace_object(ctx, par, party_trace);
-}
+#define trace_ast(TYPE, SRC, NAME) ({ \
+  TYPE *astExpr = SRC; \
+  closure_trace(ctx, astExpr->expr); \
+  pony_trace(ctx, &astExpr->type); \
+  encore_trace_object(ctx, astExpr->NAME, party_delay_type.trace); \
+  par_t *par = astExpr->result.p; \
+  encore_trace_object(ctx, par, party_trace); \
+  astExpr; \
+}) \
 
 // TODO: finish other cases!
 void party_delay_trace(pony_ctx_t* ctx, void* p)
@@ -198,25 +195,44 @@ void party_delay_trace(pony_ctx_t* ctx, void* p)
   delayed_par_t *ast = (delayed_par_t*)p;
   switch(ast->flag)
   {
-  case AST_EXPR_PAR: {
-    party_delay_expr_trace(ctx, ast);
-    break;
-  }
-  case AST_EXPR_TWO_PAR_SRC: {
-    break;
-  }
-  case AST_EXPR_REDUCE: {
-    break;
-  }
-  case AST_DELAY_PAR_VALUE: {
-    break;
-  }
-  case AST_PAR_VALUE: {
-    break;
-  }
-  case AST_DELAY_TREE: {
-    break;
-  }
+    case AST_EXPR_PAR: {
+      trace_ast(ast_expr_t, ast->v.ast_expr, ast);
+      break;
+    }
+    case AST_EXPR_TWO_PAR_SRC: {
+      ast_two_par_tsource_t *astExpr = trace_ast(ast_two_par_tsource_t, ast->v.ast_twosource, left);
+      encore_trace_object(ctx, astExpr->right, party_delay_type.trace);
+      break;
+    }
+    case AST_EXPR_REDUCE: {
+      ast_reduce_t *astExpr = trace_ast(ast_reduce_t, ast->v.ast_reduce, ast);
+
+      // TODO: trace of the runtime type so that it is not collected?
+      pony_trace(ctx, &astExpr->initType);
+
+      // TODO: is it like this?
+      encore_trace_object(ctx, astExpr->init.p, astExpr->initType->trace);
+      break;
+    }
+    case AST_DELAY_PAR_VALUE: {
+      ast_delay_t *delay = ast->v.ast_par;
+
+      // TODO: trace of the runtime type so that it is not collected?
+      pony_trace(ctx, &delay->type);
+
+      // TODO: check if this is correct.
+      encore_trace_object(ctx, delay->expr, closure_trace);
+      break;
+    }
+    case AST_PAR_VALUE: {
+      encore_trace_object(ctx, ast->v.par, party_type.trace);
+      break;
+    }
+    case AST_DELAY_TREE: {
+      party_delay_trace(ctx, ast->v.ast_tree->left);
+      party_delay_trace(ctx, ast->v.ast_tree->right);
+      break;
+    }
   }
 }
 
@@ -323,23 +339,6 @@ new_expr_ast(pony_ctx_t **ctx, delayed_par_t *ast, closure_t* const closure,
                              .ast = ast};
 
   return new_delay_par(AST_EXPR_PAR, rtype, expr_node);
-}
-
-// TODO: `init` is a realised value. is there any advantage / use case for a
-//       delayed init value, e.g. init = delay(p)?
-static inline delayed_par_t*
-new_reduce_ast(pony_ctx_t **ctx, delayed_par_t *ast, closure_t* const closure,
-               encore_arg_t init, pony_type_t const * const rtype, AST_COMBINATOR combinator)
-{
-  ast_reduce_t *expr_node = encore_alloc(*ctx, sizeof* expr_node);
-  *expr_node = (ast_reduce_t) {.tag = combinator,
-                               .linear = false,
-                               .expr = closure,
-                               .type = rtype,
-                               .ast = ast,
-                               .init = init };
-
-  return new_delay_par(AST_EXPR_REDUCE, rtype, expr_node);
 }
 
 static inline delayed_par_t*
@@ -511,11 +510,23 @@ delay_extract(pony_ctx_t **ctx, delayed_par_t *ast)
   return NULL;
 }
 
+// TODO: `init` is a realised value. is there any advantage / use case for a
+//       delayed init value, e.g. init = delay(p)?
 delayed_par_t*
 delay_reduce(pony_ctx_t **ctx, delayed_par_t * const ast, encore_arg_t init,
-             closure_t * const closure, pony_type_t const * const type)
+             closure_t * const closure, pony_type_t const * const resultType,
+             pony_type_t const * const initType)
 {
-  return new_reduce_ast(ctx, ast, closure, init, type, AST_C_REDUCE);
+  ast_reduce_t *expr_node = encore_alloc(*ctx, sizeof* expr_node);
+  *expr_node = (ast_reduce_t) {.tag = AST_C_REDUCE,
+                               .linear = false,
+                               .expr = closure,
+                               .type = resultType,
+                               .ast = ast,
+                               .init = init,
+                               .initType = initType };
+
+  return new_delay_par(AST_EXPR_REDUCE, resultType, expr_node);
 }
 
 delayed_par_t*

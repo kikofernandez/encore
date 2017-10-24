@@ -221,7 +221,8 @@ delay_extract(pony_ctx_t **ctx, delayed_par_t *p);
 
 delayed_par_t*
 delay_reduce(pony_ctx_t **ctx, delayed_par_t * const ast, encore_arg_t init,
-             closure_t * const closure, pony_type_t * type);
+             closure_t * const closure, pony_type_t * resultType,
+             pony_type_t * initType);
 
 delayed_par_t*
 delay_intersection(pony_ctx_t **ctx, delayed_par_t *par_left, delayed_par_t *par_right,
