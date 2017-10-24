@@ -386,98 +386,36 @@ delay_each(pony_ctx_t **ctx, delay_t * const val, pony_type_t const * const type
 //            if the ParT has not been shared with an actor or with another ParT
 
 
-#define run_delay_par_value(ctx, AST) ({         \
-  par_t *par = NULL; \
-  do { \
-    ast_delay_t *delay_value = AST->v.ast_par;                     \
-    par = (par_t*) closure_call(&ctx, (closure_t*) delay_value->expr, (value_t[]){}).p; \
-  } while (0); \
-  par; \
-}) \
-
-// TODO: (kiko) run and interpret delayed ParTs
-par_t*
-run_delay_par(pony_ctx_t **ctx, delayed_par_t *p)
+// TODO: finish
+static inline par_t*
+interpret_ast(pony_ctx_t **ctx, delayed_par_t *ast)
 {
-  switch(p->flag){
-  case AST_PAR_VALUE: {
-    return p->v.par;
-  }
-  case AST_DELAY_PAR_VALUE: {
-    return run_delay_par_value(*ctx, p);
-  }
-  case AST_EXPR_PAR: {
-    break;
-  }
-  case AST_EXPR_TWO_PAR_SRC: {
-    break;
-  }
-  case AST_DELAY_TREE: {
-    break;
-  }
-  case AST_EXPR_REDUCE: {
-    break;
-  }
-  }
-  return NULL;
-}
+  stack_s *stack = NULL;
+  pony_type_t *type = ast_get_type(ast);
+  par_t *seed_par = new_par_empty(ctx, type);
 
-/* static inline par_t* */
-/* interpret_ast_combinator(); */
-
-/* static inline par_t* */
-/* interpret_ast_value(); */
-
-/* static inline par_t* */
-/* interpret_ast_node(pony_ctx_t **ctx, delayed_par_t *ast) */
-/* { */
-/*   stack_t *stack = NULL; */
-/*   par_t *seed_par = NULL; */
-/*   while(ast){ */
-/*     switch(ast->flag){ */
-/*     case AST_PAR_VALUE: { */
-/*       par_t *par = interpret_ast_value(ctx, ast); */
-/*       STACK_POP(stack, ast); */
-/*     } */
-/*     case AST_DELAY_PAR_VALUE: { */
-/*       ast_delay_t *delay_value = p->v.ast_par; */
-/*       return (par_t*) closure_call(ctx, (closure_t*) delay_value->expr, (value_t[]){}).p; */
-/*     } */
-/*     case AST_EXPR_PAR: { */
-/*       break; */
-/*     } */
-/*     case AST_EXPR_TWO_PAR_SRC: { */
-/*       break; */
-/*     } */
-/*     case AST_EXPR_REDUCE: { */
-/*       break; */
-/*     } */
-/*     } */
-/*   } */
-/* } */
-
-// TODO: (kiko) on extract, interpret the AST nodes.
-par_t*
-delay_extract(pony_ctx_t **ctx, delayed_par_t *ast)
-{
   while(ast){
     switch(ast->flag){
       case AST_PAR_VALUE: {
-        return party_extract(ctx, ast->v.par, party_get_type(ast->v.par));
+        seed_par = new_par_p(ctx, seed_par, ast->v.par, &party_type);
+        STACK_POP(stack, ast);
+        break;
       }
       case AST_DELAY_PAR_VALUE: {
-        return run_delay_par_value(*ctx, ast);
+        ast_delay_t *delay_value = ast->v.ast_par;
+        par_t *p = (par_t*) closure_call(ctx, (closure_t*) delay_value->expr, (value_t[]){}).p;
+        seed_par = new_par_p(ctx, seed_par, p, &party_type);
+        STACK_POP(stack, ast);
+        break;
       }
       case AST_DELAY_TREE: {
+        ast_delay_par_t *delay_par = ast->v.ast_tree;
+        STACK_PUSH(stack, delay_par->right);
+        ast = delay_par->left;
         break;
       }
       case AST_EXPR_PAR: {
-        /* return interpret_ast_node(ctx, ast); */
         break;
-      /* ast_expr_t *expr = ast->v.ast_expr; */
-      /* par_t *p2 = run_delay_par(ctx, expr->ast); */
-      /* par_t *p3 = party_sequence(ctx, p2, expr->expr, expr->type); */
-      /* return p3; */
       }
       case AST_EXPR_TWO_PAR_SRC: {
         break;
@@ -486,10 +424,15 @@ delay_extract(pony_ctx_t **ctx, delayed_par_t *ast)
         break;
       }
     }
-    // TODO: update p
   }
-  exit(-1);
-  return NULL;
+  return seed_par;
+}
+
+par_t*
+delay_extract(pony_ctx_t **ctx, delayed_par_t *ast)
+{
+  par_t *p = interpret_ast(ctx, ast);
+  return party_extract(ctx, p, party_get_type(p));
 }
 
 // NOTE: `init` is a realised value. is there any advantage / use case for a
