@@ -191,7 +191,7 @@ delayed_par_t*
 new_delayed_realised_par_value(pony_ctx_t **ctx, par_t * const par, pony_type_t const * const type);
 
 delayed_par_t*
-new_delayed_par_merge(pony_ctx_t **ctx, delayed_par_t d1, delayed_par_t d2, pony_type_t const * const rtype);
+new_delayed_par_merge(pony_ctx_t **ctx, delayed_par_t *d1, delayed_par_t *d2, pony_type_t const * const rtype);
 
 // DELAY PART: combinators that extend the AST nodes given as input
 

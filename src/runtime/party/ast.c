@@ -62,6 +62,7 @@ typedef enum AST_PAR_FLAG
   AST_EXPR_PAR, // Matches ast_expr_t* in `v`
   AST_EXPR_TWO_PAR_SRC, // Matches ast_two_par_tsource_t* in `v`
   AST_EXPR_REDUCE, // Matches ast_reduce_t* in `v`
+  AST_DELAY_TREE, // Matches ast_delay_par_t* in `v`
   AST_DELAY_PAR_VALUE, // Matches a ast_delay_t* value, i.e. delay
   AST_PAR_VALUE      // Matches a par_t* that is not "delayed"
 } AST_PAR_FLAG;
@@ -124,6 +125,7 @@ typedef struct ast_delay_par_t
 {
   delayed_par_t *left;
   delayed_par_t *right;
+  pony_type_t *type;
 } ast_delay_par_t;
 
 typedef struct delayed_par_t {
@@ -154,13 +156,9 @@ typedef struct delayed_par_t {
        */
 
       // a ParT value that has been delayed: delay(f())
-      ast_delay_t *ast_par; //
-      // TODO: what about:
-      // ast_delayed_par_t ast_par;
-      // struct ast_delayed_par_t {
-      //   delayed_par_t *left;
-      //   delayed_par_t *right;
-      // }
+      ast_delay_t *ast_par;
+
+      ast_delay_par_t *ast_tree;
 
       // a realised ParT value: v_1 || v_2
       par_t *par;
@@ -212,6 +210,9 @@ void party_delay_trace(pony_ctx_t* ctx, void* p)
   case AST_PAR_VALUE: {
     break;
   }
+  case AST_DELAY_TREE: {
+    break;
+  }
   }
 }
 
@@ -237,6 +238,10 @@ ast_get_type(delayed_par_t *ast)
       assert(ast->type == ast->v.ast_par->type);
       return ast->v.ast_par->type;
     }
+    case AST_DELAY_TREE: {
+      assert(ast->type == ast->v.ast_tree->type);
+      return ast->v.ast_tree->type;
+    }
     case AST_PAR_VALUE: {
       assert(ast->type == party_get_type(ast->v.par));
       return party_get_type(ast->v.par);
@@ -260,6 +265,9 @@ ast_get_type(delayed_par_t *ast)
      case AST_EXPR_PAR: { \
        *ast_node = (delayed_par_t) {.v = {.ast_expr = (void*) SOURCE}}; break; \
      } \
+     case AST_DELAY_TREE: { \
+       *ast_node = (delayed_par_t) {.v = {.ast_tree = (void*) SOURCE}}; break; \
+     } \
      case AST_DELAY_PAR_VALUE: { \
        *ast_node = (delayed_par_t) {.v = {.ast_expr = (void*) SOURCE}}; break; \
      } \
@@ -281,20 +289,22 @@ delayed_par_t*
 new_delayed_par_value(pony_ctx_t **ctx, delay_t * const val, pony_type_t const * const rtype)
 {
   ast_delay_t *const delay_expr = encore_alloc(*ctx, sizeof* delay_expr);
-  *delay_expr = (ast_delay_t){.expr = val, .type = rtype, .linear=false};
+  *delay_expr = (ast_delay_t){.expr = val,
+                              .type = rtype,
+                              .linear=false};
   return new_delay_par(AST_DELAY_PAR_VALUE, rtype, delay_expr);
 }
 
 delayed_par_t*
-new_delayed_par_merge(pony_ctx_t **ctx, delayed_par_t d1,
-                      delayed_par_t d2, pony_type_t const * const rtype)
+new_delayed_par_merge(pony_ctx_t **ctx, delayed_par_t *left,
+                      delayed_par_t *right, pony_type_t const * const rtype)
 {
-  // TODO: finish!
-  (void) ctx;
-  (void) d1;
-  (void) d2;
-  (void) rtype;
-  return NULL;
+  ast_delay_par_t *tree = encore_alloc(*ctx, sizeof* tree);
+  *tree = (ast_delay_par_t) {.left = left,
+                             .right = right,
+                             .type = rtype};
+
+  return new_delay_par(AST_DELAY_TREE, rtype, tree);
 }
 
 static inline delayed_par_t*
@@ -418,6 +428,9 @@ run_delay_par(pony_ctx_t **ctx, delayed_par_t *p)
   case AST_EXPR_TWO_PAR_SRC: {
     break;
   }
+  case AST_DELAY_TREE: {
+    break;
+  }
   case AST_EXPR_REDUCE: {
     break;
   }
@@ -464,29 +477,33 @@ delay_extract(pony_ctx_t **ctx, delayed_par_t *ast)
 {
   while(ast){
     switch(ast->flag){
-    case AST_PAR_VALUE: {
-      return party_extract(ctx, ast->v.par, party_get_type(ast->v.par));
-    }
-    case AST_DELAY_PAR_VALUE: {
-      return run_delay_par_value(*ctx, ast);
-    }
-    case AST_EXPR_PAR: {
-      /* return interpret_ast_node(ctx, ast); */
-      break;
-    /* ast_expr_t *expr = ast->v.ast_expr; */
-    /* par_t *p2 = run_delay_par(ctx, expr->ast); */
-    /* par_t *p3 = party_sequence(ctx, p2, expr->expr, expr->type); */
-    /* return p3; */
-    }
-    case AST_EXPR_TWO_PAR_SRC: {
-      break;
-    }
-    case AST_EXPR_REDUCE: {
-      break;
-    }
+      case AST_PAR_VALUE: {
+        return party_extract(ctx, ast->v.par, party_get_type(ast->v.par));
+      }
+      case AST_DELAY_PAR_VALUE: {
+        return run_delay_par_value(*ctx, ast);
+      }
+      case AST_DELAY_TREE: {
+        break;
+      }
+      case AST_EXPR_PAR: {
+        /* return interpret_ast_node(ctx, ast); */
+        break;
+      /* ast_expr_t *expr = ast->v.ast_expr; */
+      /* par_t *p2 = run_delay_par(ctx, expr->ast); */
+      /* par_t *p3 = party_sequence(ctx, p2, expr->expr, expr->type); */
+      /* return p3; */
+      }
+      case AST_EXPR_TWO_PAR_SRC: {
+        break;
+      }
+      case AST_EXPR_REDUCE: {
+        break;
+      }
     }
     // TODO: update p
   }
+  exit(-1);
   return NULL;
 }
 
