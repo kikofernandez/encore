@@ -380,11 +380,52 @@ delay_each(pony_ctx_t **ctx, delay_t * const val, pony_type_t const * const type
 
 
 // TODO: finish
-static inline par_t*
-interpret_ast(pony_ctx_t **ctx, delayed_par_t *ast)
+/* static delayed_par_t* */
+/* interpret_ast(pony_ctx_t **ctx, delayed_par_t *ast) */
+/* { */
+/*   stack_s *stack = NULL; */
+/*   pony_type_t *type = ast_get_type(ast); */
+/*   par_t *seed_par = new_par_empty(ctx, type); */
+
+/*   while(ast){ */
+/*     switch(ast->flag){ */
+/*       case AST_PAR_VALUE: { */
+/*         seed_par = new_par_p(ctx, seed_par, ast->v.par, &party_type); */
+/*         STACK_POP(stack, ast); */
+/*         break; */
+/*       } */
+/*       case AST_DELAY_PAR_VALUE: { */
+/*         ast_delay_t *delay_value = ast->v.ast_par; */
+/*         par_t *p = (par_t*) closure_call(ctx, (closure_t*) delay_value->expr, (value_t[]){}).p; */
+/*         seed_par = new_par_p(ctx, seed_par, p, &party_type); */
+/*         STACK_POP(stack, ast); */
+/*         break; */
+/*       } */
+/*       case AST_DELAY_TREE: { */
+/*         ast_delay_par_t *delay_par = ast->v.ast_tree; */
+/*         STACK_PUSH(stack, delay_par->right); */
+/*         ast = delay_par->left; */
+/*         break; */
+/*       } */
+/*       case AST_EXPR_PAR: { */
+/*         break; */
+/*       } */
+/*       case AST_EXPR_TWO_PAR_SRC: { */
+/*         break; */
+/*       } */
+/*       case AST_EXPR_REDUCE: { */
+/*         break; */
+/*       } */
+/*     } */
+/*   } */
+
+/*   return new_delay_par_value(ctx, seed_par, &party_delay_type); */
+/* } */
+
+array_t*
+delay_extract(pony_ctx_t **ctx, delayed_par_t *ast, pony_type_t *type)
 {
   stack_s *stack = NULL;
-  pony_type_t *type = ast_get_type(ast);
   par_t *seed_par = new_par_empty(ctx, type);
 
   while(ast){
@@ -418,14 +459,7 @@ interpret_ast(pony_ctx_t **ctx, delayed_par_t *ast)
       }
     }
   }
-  return seed_par;
-}
-
-par_t*
-delay_extract(pony_ctx_t **ctx, delayed_par_t *ast)
-{
-  par_t *p = interpret_ast(ctx, ast);
-  return party_extract(ctx, p, party_get_type(p));
+  return party_extract(ctx, seed_par, party_get_type(seed_par));
 }
 
 // NOTE: `init` is a realised value. is there any advantage / use case for a

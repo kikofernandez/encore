@@ -216,8 +216,20 @@ delay_join(pony_ctx_t **ctx, delayed_par_t *ast);
 delayed_par_t*
 delay_each(pony_ctx_t **ctx, delay_t * const val, pony_type_t const * const type);
 
-par_t*
-delay_extract(pony_ctx_t **ctx, delayed_par_t *p);
+// NOTE: this method interprets the AST nodes to return an array.
+//       all par_t* method will be internal to the module, in the end.
+
+
+/** Turns the ParT into an array.
+ *
+ * @param ctx The current context
+ * @param p A delayed ParT computation (may be already running computations)
+ * @param type The runtime type contained in the array, e.g. [a], a is the runtime type
+ * @return Array of type items
+ *
+ */
+array_t*
+delay_extract(pony_ctx_t **ctx, delayed_par_t *p, pony_type_t *type);
 
 delayed_par_t*
 delay_reduce(pony_ctx_t **ctx, delayed_par_t * const ast, encore_arg_t init,
