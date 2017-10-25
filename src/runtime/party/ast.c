@@ -182,7 +182,6 @@ pony_type_t party_delay_type =
 #define trace_ast(TYPE, SRC, NAME) ({ \
   TYPE *astExpr = SRC; \
   closure_trace(ctx, astExpr->expr); \
-  pony_trace(ctx, &astExpr->type); \
   encore_trace_object(ctx, astExpr->NAME, party_delay_type.trace); \
   par_t *par = astExpr->result.p; \
   encore_trace_object(ctx, par, party_trace); \
@@ -207,18 +206,12 @@ void party_delay_trace(pony_ctx_t* ctx, void* p)
     case AST_EXPR_REDUCE: {
       ast_reduce_t *astExpr = trace_ast(ast_reduce_t, ast->v.ast_reduce, ast);
 
-      // NOTE: trace of the runtime type so that it is not collected?
-      pony_trace(ctx, &astExpr->initType);
-
-      // NOTE: is it like this?
+      // NOTE: check if this is correct
       encore_trace_object(ctx, astExpr->init.p, astExpr->initType->trace);
       break;
     }
     case AST_DELAY_PAR_VALUE: {
       ast_delay_t *delay = ast->v.ast_par;
-
-      // NOTE: trace of the runtime type so that it is not collected?
-      pony_trace(ctx, &delay->type);
 
       // NOTE: check if this is correct.
       encore_trace_object(ctx, delay->expr, closure_trace);
