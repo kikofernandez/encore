@@ -9,6 +9,7 @@
 #include "structure.h"
 #include "list.c"
 #include "set.h"
+#include "interpreter.h"
 
 typedef struct fmap_s fmap_s;
 typedef par_t* (*fmapfn)(par_t*, fmap_s*);
@@ -630,6 +631,54 @@ array_t* party_extract(pony_ctx_t **ctx,
   size_t size = party_get_final_size(ctx, par);
   return party_to_array(ctx, par, size, type);
 }
+
+delayed_par_t*
+interpreter_to_realised_party(pony_ctx_t **ctx, par_t * p, pony_type_t *type)
+{
+  par_t *result = new_par_empty(ctx, type);
+
+  list_t *tmp_lst = NULL;
+  while(p){
+    switch(p->tag){
+      case EMPTY_PAR: {
+        tmp_lst = list_pop(tmp_lst, (value_t*)&p);
+        break;
+      }
+      case VALUE_PAR: {
+        result = new_par_p(ctx, result, p, &party_type);
+        tmp_lst = list_pop(tmp_lst, (value_t*)&p);
+        break;
+      }
+      case FUTURE_PAR: {
+        future_t *fut = party_get_fut(p);
+        value_t v = future_get_actor(ctx, fut);
+        result = new_par_p(ctx, result, new_par_v(ctx, v, type), &party_type);
+        tmp_lst = list_pop(tmp_lst, (value_t*)&p);
+        break;
+      }
+      case PAR_PAR: {
+        par_t *left = party_get_parleft(p);
+        par_t *right = party_get_parright(p);
+        tmp_lst = list_push(tmp_lst, (value_t) { .p = right });
+        p = left;
+        break;
+      }
+      case FUTUREPAR_PAR: {
+        future_t *futpar = party_get_futpar(p);
+        p = future_get_actor(ctx, futpar).p;
+        break;
+      }
+      case ARRAY_PAR: {
+        result = new_par_p(ctx, result, p, p->rtype);
+        tmp_lst = list_pop(tmp_lst, (value_t*)&p);
+        break;
+      }
+      default: exit(-1);
+    }
+  }
+  return new_delay_par_value(ctx, result, type);
+}
+
 
 //----------------------------------------
 // EACH COMBINATOR
