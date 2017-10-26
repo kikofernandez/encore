@@ -1,0 +1,48 @@
+import ParT.ParT
+
+fun gen(): Par[int]
+  liftv(34)
+end
+
+fun gen2(): Par[int]
+  liftv(12)
+end
+
+fun inc(x: int): int
+  x + 1
+end
+
+fun adult(age: int): bool
+  if age < 18 then
+    false
+  else
+    true
+  end
+end
+
+active class Main
+  def main(): unit
+    val p11 = gen
+    val p12 = gen2
+    val p2 = empty[int]()
+    val p3 = EMBED ([int])
+               delayed_par_t *ast = new_delay_par_value(_ctx, (delay_t*) #{p11}, ENCORE_PRIMITIVE);
+               delayed_par_t *ast2 = new_delay_par_value(_ctx, (delay_t*) #{p12}, ENCORE_PRIMITIVE);
+               delayed_par_t *ast3 = new_delayed_par_merge(_ctx, ast, ast2, &party_type);
+               ast = delay_sequence(_ctx, ast3, #{inc}, ENCORE_PRIMITIVE);
+               ast = delay_sequence(_ctx, ast3, #{adult}, ENCORE_PRIMITIVE);
+               par_t* p = delay_extract(_ctx, ast, ENCORE_PRIMITIVE);
+               p;
+             END
+    for x <- p3 do
+      println("Number: {}", x)
+    end
+  end
+end
+
+
+-- active class Main
+--   def main(): unit
+--     liftv(3) ||| liftv(2)
+--   end
+-- end
