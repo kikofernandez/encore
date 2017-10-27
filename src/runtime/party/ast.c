@@ -111,6 +111,7 @@ typedef struct ast_expr_t
 
 typedef struct ast_reduce_t
 {
+  // ignore the AST_CONBINATOR for the reduce case.
   DEFINE_AST(ast)
   encore_arg_t init; // TODO: this is a realised value. should it be delayed?
   pony_type_t *initType;
@@ -301,6 +302,12 @@ new_delayed_par_value(pony_ctx_t **ctx, delay_t * const val, pony_type_t const *
 }
 
 delayed_par_t*
+new_delayed_future_value(pony_ctx_t **ctx, future_t * const fut, pony_type_t const * const type)
+{
+  return new_delay_par_value(ctx, new_par_f(ctx, fut, type), type);
+}
+
+delayed_par_t*
 new_delayed_par_merge(pony_ctx_t **ctx, delayed_par_t *left,
                       delayed_par_t *right, pony_type_t const * const rtype)
 {
@@ -440,6 +447,22 @@ interpreter_to_realised_ast_expr_par(pony_ctx_t **ctx, void ** values, pony_type
     }
   }
   exit(-1);
+}
+
+
+static inline delayed_par_t*
+interpreter_to_realised_ast_reduce_par(pony_ctx_t **ctx, void ** values, pony_type_t *type)
+{
+  (void) type;
+  par_t *result = values[0];
+  ast_reduce_t *ast_red = ((delayed_par_t *)values[1])->v.ast_reduce;
+  delay_t *e = ast_red->expr;
+  value_t init = ast_red->init;
+  pony_type_t *rtype = ast_red->type;
+
+  future_t *fut = party_reduce_sequential(ctx, result, init, (void *) e, rtype);
+
+  return new_delay_par_value(ctx, fut, &future_type);
 }
 
 
@@ -587,7 +610,51 @@ interpreter_to_realised_delayed_party(pony_ctx_t **ctx, delayed_par_t * ast, pon
         break;
       }
       case AST_EXPR_REDUCE: {
-        exit(-1);
+        // TODO: quite similar to AST_DELAY_PAR_VALUE
+        bool cached = __atomic_load_n(&ast->cached, __ATOMIC_ACQUIRE);
+        ast_reduce_t *ast_red = ast->v.ast_reduce;
+
+        if (cached) {
+          bool running = __atomic_exchange_n(&ast->running, true, __ATOMIC_ACQ_REL);
+
+          if (!running) {
+            // Then we run the computation and save
+            delayed_par_t *dp = interpreter_to_realised_delayed_party(ctx, ast_red->ast, ast_red->type);
+            delayed_par_t *party = interpreter_to_realised_ast_reduce_par(ctx, (void*[]){dp->v.par, ast}, type);
+            // cached computations
+            __atomic_store((void**) &ast_red->result.p, (void **) &party->v.par, __ATOMIC_RELEASE);
+            // add result to ongoing seed / result value
+            seed_par = new_par_p(ctx, seed_par, party->v.par, &party_type);
+          } else {
+            // we wait for the result or the result is already there
+            // NOTE: isn't result.p already `void*`. the compiler doesn't let me.
+            void *result = __atomic_load_n(&ast_red->result.p, __ATOMIC_ACQUIRE);
+            if (!result) {
+
+              // result has not been set yet.
+
+              // Either attach computation to be run by the other thread or block.
+              // This is difficult because by the time I attach the computation,
+              // the other thread may already have exit.
+
+              // TODO:
+              (void)NULL;
+              exit(-1);
+
+            } else {
+              // there is a result
+              delayed_par_t *party =  interpreter_to_realised_ast_reduce_par(ctx, (void*[]){result, ast}, type);
+              seed_par = new_par_p(ctx, seed_par, party->v.par, &party_type);
+            }
+          }
+        } else {
+          delayed_par_t *dp = interpreter_to_realised_delayed_party(ctx, ast_red->ast, ast_red->type);
+          // take ParT and apply pending computations, ParT >> foo
+          delayed_par_t *party = interpreter_to_realised_ast_reduce_par(ctx, (void*[]){dp->v.par, ast}, type);
+          // add result to ongoing seed / result value
+          seed_par = new_par_p(ctx, seed_par, party->v.par, &party_type);
+        }
+        STACK_POP(stack, ast);
         break;
       }
     }

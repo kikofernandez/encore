@@ -179,6 +179,7 @@ run_delay_par(pony_ctx_t **ctx, delayed_par_t *p);
 // Creates a delayed ParT whose value can be delayed or realised, based on type information
 #define new_delay_par_value(ctx, VAL, runtime_type)  _Generic((VAL), \
            par_t * : new_delayed_realised_par_value, \
+           future_t * : new_delayed_future_value,  \
            delay_t * : new_delayed_par_value, \
            array_t * : delay_each, \
            default: new_delayed_par_value \
@@ -190,6 +191,9 @@ new_delayed_par_value(pony_ctx_t **ctx, delay_t * const val, pony_type_t const *
 
 delayed_par_t*
 new_delayed_realised_par_value(pony_ctx_t **ctx, par_t * const par, pony_type_t const * const type);
+
+delayed_par_t*
+new_delayed_future_value(pony_ctx_t **ctx, future_t * const fut, pony_type_t const * const type);
 
 delayed_par_t*
 new_delayed_par_merge(pony_ctx_t **ctx, delayed_par_t *d1, delayed_par_t *d2, pony_type_t const * const rtype);

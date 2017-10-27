@@ -43,6 +43,10 @@ fun cmp(x: int, y: int): int
   end
 end
 
+fun sum(x: int, y: int): int
+  x + y
+end
+
 active class Main
   def distinct(): unit
     println("Test: distinct.")
@@ -157,6 +161,23 @@ active class Main
     end
   end
 
+  def testReduce(): unit
+    println("Test: reduce.")
+    val p11 = gen2
+    val init = 0
+    val p3 = EMBED ([int])
+               delayed_par_t *ast = new_delay_par_value(_ctx, (delay_t*) #{gen2}, ENCORE_PRIMITIVE);
+               delayed_par_t *ast2 = new_delay_par_value(_ctx, (delay_t*) #{eachBasedParT}, ENCORE_PRIMITIVE);
+               delayed_par_t *ast3 = new_delayed_par_merge(_ctx, ast, ast2, &party_type);
+               delayed_par_t *result = delay_reduce(_ctx, ast3, (value_t) {.i = #{init}}, #{sum}, ENCORE_PRIMITIVE, ENCORE_PRIMITIVE);
+               par_t* p = delay_extract(_ctx, result, ENCORE_PRIMITIVE);
+               p;
+             END
+    for x <- p3 do
+      println("Number: {}", x)
+    end
+  end
+
   def main(): unit
     this.sequence()
     this.distinct()
@@ -164,6 +185,7 @@ active class Main
     this.eachDistinct()
     this.testRecomputation()
     this.testCache()
+    this.testReduce()
   end
 end
 
