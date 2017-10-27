@@ -88,9 +88,9 @@ typedef enum AST_PAR_FLAG
 
 // NOTE: should linear be an enum mode: LINEAR, ACTOR, READ (only these modes make sense in the ParT)
 #define DEFINE_AST(NAME) \
+    delayed_par_t *NAME; \
     delay_t * expr; \
     pony_type_t * type; \
-    delayed_par_t *NAME; \
     value_t result; \
     enum AST_COMBINATOR tag; \
     bool linear; \
@@ -471,9 +471,7 @@ interpreter_to_realised_delayed_party(pony_ctx_t **ctx, delayed_par_t * ast, pon
         break;
       }
       case AST_DELAY_PAR_VALUE: {
-        // TODO: it seems almost like a copy-paste from AST_EXPR_PAR
         bool cached = __atomic_load_n(&ast->cached, __ATOMIC_ACQUIRE);
-
         ast_delay_t *delay_value = ast->v.ast_par;
 
         if (cached) {
@@ -534,11 +532,16 @@ interpreter_to_realised_delayed_party(pony_ctx_t **ctx, delayed_par_t * ast, pon
           if (!running) {
 
             // Then we run the computation and save
-            par_t *p = (par_t*) closure_call(ctx, (closure_t*) ast_expr->expr, (value_t[]){}).p;
-            void *result = ast_expr->result.p;
-            __atomic_store(&result, (void**)&p, __ATOMIC_RELEASE);
-            seed_par = new_par_p(ctx, seed_par, p, &party_type);
+            delayed_par_t *dp = interpreter_to_realised_delayed_party(ctx, ast_expr->ast, ast_expr->type);
 
+            // take ParT and apply pending computations, ParT >> foo
+            delayed_par_t *party = interpreter_to_realised_ast_expr_par(ctx, (void*[]){dp->v.par, ast}, type);
+
+            // cached computations
+            __atomic_store((void**) &ast_expr->result.p, (void **) &party->v.par, __ATOMIC_RELEASE);
+
+            // add result to ongoing seed / result value
+            seed_par = new_par_p(ctx, seed_par, party->v.par, &party_type);
           } else {
 
             // we wait for the result or the result is already there

@@ -147,8 +147,9 @@ active class Main
     val p3 = EMBED ([int])
                delayed_par_t *ast = delay_cache(_ctx, new_delay_par_value(_ctx, (delay_t*) #{p11}, ENCORE_PRIMITIVE));
                delayed_par_t *ast3 = new_delayed_par_merge(_ctx, ast, ast, &party_type);
-               //delayed_par_t *result = delay_sequence(_ctx, ast3, #{inc}, ENCORE_PRIMITIVE);
-               par_t* p = delay_extract(_ctx, ast3, ENCORE_PRIMITIVE);
+               delayed_par_t *result = delay_sequence(_ctx, ast3, #{inc}, ENCORE_PRIMITIVE);
+               result = delay_sequence(_ctx, result, #{inc}, ENCORE_PRIMITIVE);
+               par_t* p = delay_extract(_ctx, result, ENCORE_PRIMITIVE);
                p;
              END
     for x <- p3 do
