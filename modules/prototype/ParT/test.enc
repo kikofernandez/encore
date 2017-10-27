@@ -62,7 +62,7 @@ active class Main
                delayed_par_t *astMerged2 = new_delayed_par_merge(_ctx, astMerged, ast3, &party_type);
 
                ast = delay_distinct(_ctx, astMerged2, #{cmp}, ENCORE_PRIMITIVE);
-               par_t* p = delay_extract(_ctx, ast, ENCORE_PRIMITIVE);
+               array_t* p = delay_extract(_ctx, ast, ENCORE_PRIMITIVE);
                p;
              END
 
@@ -82,7 +82,7 @@ active class Main
                delayed_par_t *ast3 = new_delayed_par_merge(_ctx, ast, ast2, &party_type);
                delayed_par_t *ast3Duplicated = new_delayed_par_merge(_ctx, ast3, ast3, &party_type);
                ast = delay_sequence(_ctx, ast3Duplicated, #{inc}, ENCORE_PRIMITIVE);
-               par_t* p = delay_extract(_ctx, ast, ENCORE_PRIMITIVE);
+               array_t* p = delay_extract(_ctx, ast, ENCORE_PRIMITIVE);
                p;
              END
 
@@ -104,7 +104,7 @@ active class Main
                ast = delay_sequence(_ctx, ast3Duplicated, #{inc}, ENCORE_PRIMITIVE);
 
                ast = delay_distinct(_ctx, ast, #{cmp}, ENCORE_PRIMITIVE);
-               par_t* p = delay_extract(_ctx, ast, ENCORE_PRIMITIVE);
+               array_t* p = delay_extract(_ctx, ast, ENCORE_PRIMITIVE);
                p;
              END
     for x <- p3 do
@@ -122,7 +122,7 @@ active class Main
                delayed_par_t *ast3 = new_delayed_par_merge(_ctx, ast, ast2, &party_type);
                ast = delay_sequence(_ctx, ast3, #{inc}, ENCORE_PRIMITIVE);
                ast = delay_sequence(_ctx, ast3, #{adult}, ENCORE_PRIMITIVE);
-               par_t* p = delay_extract(_ctx, ast, ENCORE_PRIMITIVE);
+               array_t* p = delay_extract(_ctx, ast, ENCORE_PRIMITIVE);
                p;
              END
     for x <- p3 do
@@ -178,6 +178,55 @@ active class Main
     end
   end
 
+  def intersection(): unit
+    println("Test: intersection.")
+    val p11 = gen
+    val p12 = gen2
+    val p13 = gen
+    val p3 = EMBED ([int])
+               delayed_par_t *ast = new_delay_par_value(_ctx, (delay_t*) #{p11}, ENCORE_PRIMITIVE);
+               delayed_par_t *ast2 = new_delay_par_value(_ctx, (delay_t*) #{p12}, ENCORE_PRIMITIVE);
+               delayed_par_t *ast3 = new_delay_par_value(_ctx, (delay_t*) #{p13}, ENCORE_PRIMITIVE);
+               delayed_par_t *astMerged = new_delayed_par_merge(_ctx, ast2, ast3, &party_type);
+               ast = delay_intersection(_ctx, ast, astMerged, #{cmp}, ENCORE_PRIMITIVE);
+               array_t* p = delay_extract(_ctx, ast, ENCORE_PRIMITIVE);
+               p;
+             END
+
+    for x <- p3 do
+      println("Number: {}", x)
+    end
+
+    println("Test: intersection.")
+    val p11 = gen
+    val p12 = gen2
+    val p3 = EMBED ([int])
+               delayed_par_t *ast = new_delay_par_value(_ctx, (delay_t*) #{p11}, ENCORE_PRIMITIVE);
+               delayed_par_t *ast2 = new_delay_par_value(_ctx, (delay_t*) #{p12}, ENCORE_PRIMITIVE);
+               ast = delay_intersection(_ctx, ast, ast2, #{cmp}, ENCORE_PRIMITIVE);
+               array_t* p = delay_extract(_ctx, ast, ENCORE_PRIMITIVE);
+               p;
+             END
+    println("Party size: {}", |p3|)
+  end
+
+  def zip(): unit
+    println("Test: zip.")
+    val p11 = eachBasedParT()
+    val p12 = eachBasedParT()
+    val p3 = EMBED ([int])
+               delayed_par_t *ast = new_delay_par_value(_ctx, (delay_t*) #{p11}, ENCORE_PRIMITIVE);
+               delayed_par_t *ast2 = new_delay_par_value(_ctx, (delay_t*) #{p12}, ENCORE_PRIMITIVE);
+               ast = delay_zip_with(_ctx, ast, ast2, #{sum}, ENCORE_PRIMITIVE);
+               array_t* p = delay_extract(_ctx, ast, ENCORE_PRIMITIVE);
+               p;
+             END
+
+    for x <- p3 do
+      println("Number: {}", x)
+    end
+  end
+
   def main(): unit
     this.sequence()
     this.distinct()
@@ -186,6 +235,8 @@ active class Main
     this.testRecomputation()
     this.testCache()
     this.testReduce()
+    this.intersection()
+    -- this.zip()
   end
 end
 

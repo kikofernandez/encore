@@ -87,11 +87,11 @@ typedef enum AST_PAR_FLAG
 */
 
 // NOTE: should linear be an enum mode: LINEAR, ACTOR, READ (only these modes make sense in the ParT)
-#define DEFINE_AST(NAME) \
+#define DEFINE_AST(NAME, RESULT) \
     delayed_par_t *NAME; \
     delay_t * expr; \
     pony_type_t * type; \
-    value_t result; \
+    value_t RESULT; \
     enum AST_COMBINATOR tag; \
     bool linear; \
 
@@ -105,14 +105,14 @@ typedef struct ast_delay_t
 
 typedef struct ast_expr_t
 {
-  DEFINE_AST(ast)
+  DEFINE_AST(ast, result)
   char padding[3];
 } ast_expr_t;
 
 typedef struct ast_reduce_t
 {
   // ignore the AST_CONBINATOR for the reduce case.
-  DEFINE_AST(ast)
+  DEFINE_AST(ast, result)
   encore_arg_t init; // TODO: this is a realised value. should it be delayed?
   pony_type_t *initType;
 } ast_reduce_t;
@@ -120,7 +120,8 @@ typedef struct ast_reduce_t
 typedef struct ast_two_par_tsource_t
 {
   delayed_par_t *right;
-  DEFINE_AST(left)
+  value_t result_right;
+  DEFINE_AST(left, result_left)
   char padding[3];
 } ast_two_par_tsource_t;
 
@@ -190,11 +191,11 @@ pony_type_t party_delay_type =
   .trace=party_delay_trace
 };
 
-#define trace_ast(TYPE, SRC, NAME) ({ \
+#define trace_ast(TYPE, SRC, NAME, RESULT) ({ \
   TYPE *astExpr = SRC; \
   closure_trace(ctx, astExpr->expr); \
   encore_trace_object(ctx, astExpr->NAME, party_delay_type.trace); \
-  par_t *par = astExpr->result.p; \
+  par_t *par = astExpr->RESULT.p; \
   encore_trace_object(ctx, par, party_trace); \
   astExpr; \
 }) \
@@ -206,16 +207,18 @@ void party_delay_trace(pony_ctx_t* ctx, void* p)
   switch(ast->flag)
   {
     case AST_EXPR_PAR: {
-      trace_ast(ast_expr_t, ast->v.ast_expr, ast);
+      trace_ast(ast_expr_t, ast->v.ast_expr, ast, result);
       break;
     }
     case AST_EXPR_TWO_PAR_SRC: {
-      ast_two_par_tsource_t *astExpr = trace_ast(ast_two_par_tsource_t, ast->v.ast_twosource, left);
+      ast_two_par_tsource_t *astExpr = trace_ast(ast_two_par_tsource_t, ast->v.ast_twosource, left, result_left);
       encore_trace_object(ctx, astExpr->right, party_delay_type.trace);
+      par_t *par = astExpr->result_right.p;
+      encore_trace_object(ctx, par, party_trace);
       break;
     }
     case AST_EXPR_REDUCE: {
-      ast_reduce_t *astExpr = trace_ast(ast_reduce_t, ast->v.ast_reduce, ast);
+      ast_reduce_t *astExpr = trace_ast(ast_reduce_t, ast->v.ast_reduce, ast, result);
 
       // NOTE: check if this is correct
       encore_trace_object(ctx, astExpr->init.p, astExpr->initType->trace);
@@ -465,6 +468,31 @@ interpreter_to_realised_ast_reduce_par(pony_ctx_t **ctx, void ** values, pony_ty
   return new_delay_par_value(ctx, fut, &future_type);
 }
 
+static inline delayed_par_t*
+interpreter_to_realised_ast_two_par(pony_ctx_t **ctx, void ** values, pony_type_t *type)
+{
+  (void) type;
+  par_t *result_left = values[0];
+  par_t *result_right = values[1];
+  ast_two_par_tsource_t *ast_two = ((delayed_par_t *)values[2])->v.ast_twosource;
+  delay_t *e = ast_two->expr;
+  pony_type_t *rtype = ast_two->type;
+
+  AST_COMBINATOR tag = ast_two->tag;
+  switch(tag){
+    case AST_C_INTERSECTION: {
+      par_t *pi = party_intersection(ctx, result_left, result_right, (void*) e, rtype);
+      return new_delay_par_value(ctx, pi, party_get_type(pi));
+    }
+    case AST_C_ZIP: {
+      par_t *pz = party_zip_with(ctx, result_left, result_right, (void *) e, rtype);
+      return new_delay_par_value(ctx, pz, party_get_type(pz));
+    }
+    default: {
+      exit(-1);
+    }
+  }
+}
 
 /** interpret an AST node where the input values have not been realised yet
  *
@@ -606,7 +634,57 @@ interpreter_to_realised_delayed_party(pony_ctx_t **ctx, delayed_par_t * ast, pon
         break;
       }
       case AST_EXPR_TWO_PAR_SRC: {
-        exit(-1);
+        // TODO: quite similar to AST_DELAY_PAR_VALUE
+        bool cached = __atomic_load_n(&ast->cached, __ATOMIC_ACQUIRE);
+        ast_two_par_tsource_t *ast_two = ast->v.ast_twosource;
+
+        if (cached) {
+          bool running = __atomic_exchange_n(&ast->running, true, __ATOMIC_ACQ_REL);
+
+          if (!running) {
+            // Then we run the computation and save
+            delayed_par_t *left = interpreter_to_realised_delayed_party(ctx, ast_two->left, ast_two->type);
+            delayed_par_t *right = interpreter_to_realised_delayed_party(ctx, ast_two->right, ast_two->type);
+            delayed_par_t *party = interpreter_to_realised_ast_two_par(ctx, (void*[]){left->v.par, right->v.par, ast}, type);
+
+            // cached computations
+            // TODO: think!
+            // we cached computations in the left node... we may need to add a new
+            // result that caches the result of both? (it's Friday...)
+            __atomic_store((void**) &ast_two->result_left, (void **) &party->v.par, __ATOMIC_RELEASE);
+            // add result to ongoing seed / result value
+            seed_par = new_par_p(ctx, seed_par, party->v.par, &party_type);
+          } else {
+            // we wait for the result or the result is already there
+            // NOTE: isn't result.p already `void*`. the compiler doesn't let me.
+            void *result_left = __atomic_load_n(&ast_two->result_left.p, __ATOMIC_ACQUIRE);
+            void *result_right = __atomic_load_n(&ast_two->result_right.p, __ATOMIC_ACQUIRE);
+            if (!result_left || !result_right) {
+
+              // result has not been set yet.
+
+              // Either attach computation to be run by the other thread or block.
+              // This is difficult because by the time I attach the computation,
+              // the other thread may already have exit.
+
+              // TODO:
+              (void)NULL;
+              exit(-1);
+
+            } else {
+              // there is a result
+              delayed_par_t *party = interpreter_to_realised_ast_two_par(ctx, (void*[]){result_left, result_right, ast}, type);
+              seed_par = new_par_p(ctx, seed_par, party->v.par, &party_type);
+            }
+          }
+        } else {
+          // TODO: Error here somewhere.
+          delayed_par_t *left = interpreter_to_realised_delayed_party(ctx, ast_two->left, ast_two->type);
+          delayed_par_t *right = interpreter_to_realised_delayed_party(ctx, ast_two->right, ast_two->type);
+          delayed_par_t *party = interpreter_to_realised_ast_two_par(ctx, (void*[]){left->v.par, right->v.par, ast}, type);
+          seed_par = new_par_p(ctx, seed_par, party->v.par, &party_type);
+        }
+        STACK_POP(stack, ast);
         break;
       }
       case AST_EXPR_REDUCE: {
