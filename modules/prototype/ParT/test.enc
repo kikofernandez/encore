@@ -8,6 +8,19 @@ fun gen2(): Par[int]
   liftv(12)
 end
 
+fun gen3(): Par[int]
+  println("Start computation...")
+  liftv(12)
+end
+
+fun eachBasedParT(): Par[int]
+  val ar = new [int](10)
+  for i <- [0..9] do
+    ar(i) = i
+  end
+  each(ar)
+end
+
 fun inc(x: int): int
   x + 1
 end
@@ -20,11 +33,85 @@ fun adult(age: int): bool
   end
 end
 
+fun cmp(x: int, y: int): int
+  if x < y then
+    -1
+  else if x > y then
+    1
+  else
+    0
+  end
+end
+
 active class Main
-  def main(): unit
+  def distinct(): unit
+    println("Test: distinct.")
+
     val p11 = gen
     val p12 = gen2
-    val p2 = empty[int]()
+    val p3 = EMBED ([int])
+               delayed_par_t *ast = new_delay_par_value(_ctx, (delay_t*) #{p11}, ENCORE_PRIMITIVE);
+               delayed_par_t *ast2 = new_delay_par_value(_ctx, (delay_t*) #{p12}, ENCORE_PRIMITIVE);
+               delayed_par_t *astMerged = new_delayed_par_merge(_ctx, ast, ast2, &party_type);
+
+               delayed_par_t *ast3 = new_delay_par_value(_ctx, (delay_t*) #{p12}, ENCORE_PRIMITIVE);
+               delayed_par_t *astMerged2 = new_delayed_par_merge(_ctx, astMerged, ast3, &party_type);
+
+               ast = delay_distinct(_ctx, astMerged2, #{cmp}, ENCORE_PRIMITIVE);
+               par_t* p = delay_extract(_ctx, ast, ENCORE_PRIMITIVE);
+               p;
+             END
+
+    for x <- p3 do
+      println("Number: {}", x)
+    end
+  end
+
+  def each(): unit
+    println("Test: each.")
+
+    val p11 = eachBasedParT
+    val p12 = gen2
+    val p3 = EMBED ([int])
+               delayed_par_t *ast = new_delay_par_value(_ctx, (delay_t*) #{p11}, ENCORE_PRIMITIVE);
+               delayed_par_t *ast2 = new_delay_par_value(_ctx, (delay_t*) #{p12}, ENCORE_PRIMITIVE);
+               delayed_par_t *ast3 = new_delayed_par_merge(_ctx, ast, ast2, &party_type);
+               delayed_par_t *ast3Duplicated = new_delayed_par_merge(_ctx, ast3, ast3, &party_type);
+               ast = delay_sequence(_ctx, ast3Duplicated, #{inc}, ENCORE_PRIMITIVE);
+               par_t* p = delay_extract(_ctx, ast, ENCORE_PRIMITIVE);
+               p;
+             END
+
+    for x <- p3 do
+      println("Number: {}", x)
+    end
+  end
+
+  def eachDistinct(): unit
+    -- Testing each and distinct
+    println("Test: each distinct")
+    val p11 = gen
+    val p12 = gen2
+    val p3 = EMBED ([int])
+               delayed_par_t *ast = new_delay_par_value(_ctx, (delay_t*) #{p11}, ENCORE_PRIMITIVE);
+               delayed_par_t *ast2 = new_delay_par_value(_ctx, (delay_t*) #{p12}, ENCORE_PRIMITIVE);
+               delayed_par_t *ast3 = new_delayed_par_merge(_ctx, ast, ast2, &party_type);
+               delayed_par_t *ast3Duplicated = new_delayed_par_merge(_ctx, ast3, ast3, &party_type);
+               ast = delay_sequence(_ctx, ast3Duplicated, #{inc}, ENCORE_PRIMITIVE);
+
+               ast = delay_distinct(_ctx, ast, #{cmp}, ENCORE_PRIMITIVE);
+               par_t* p = delay_extract(_ctx, ast, ENCORE_PRIMITIVE);
+               p;
+             END
+    for x <- p3 do
+      println("Number: {}", x)
+    end
+  end
+
+  def sequence(): unit
+    println("Test: sequence.")
+    val p11 = gen
+    val p12 = gen2
     val p3 = EMBED ([int])
                delayed_par_t *ast = new_delay_par_value(_ctx, (delay_t*) #{p11}, ENCORE_PRIMITIVE);
                delayed_par_t *ast2 = new_delay_par_value(_ctx, (delay_t*) #{p12}, ENCORE_PRIMITIVE);
@@ -37,6 +124,45 @@ active class Main
     for x <- p3 do
       println("Number: {}", x)
     end
+  end
+
+  def testRecomputation(): unit
+    println("Test: recomputation.")
+    val p11 = gen3
+    val p3 = EMBED ([int])
+               delayed_par_t *ast = new_delay_par_value(_ctx, (delay_t*) #{p11}, ENCORE_PRIMITIVE);
+               delayed_par_t *ast3 = new_delayed_par_merge(_ctx, ast, ast, &party_type);
+               delayed_par_t *result = delay_sequence(_ctx, ast3, #{inc}, ENCORE_PRIMITIVE);
+               par_t* p = delay_extract(_ctx, result, ENCORE_PRIMITIVE);
+               p;
+             END
+    for x <- p3 do
+      println("Number: {}", x)
+    end
+  end
+
+  def testCache(): unit
+    println("Test: cache.")
+    val p11 = gen3
+    val p3 = EMBED ([int])
+               delayed_par_t *ast = delay_cache(_ctx, new_delay_par_value(_ctx, (delay_t*) #{p11}, ENCORE_PRIMITIVE));
+               delayed_par_t *ast3 = new_delayed_par_merge(_ctx, ast, ast, &party_type);
+               //delayed_par_t *result = delay_sequence(_ctx, ast3, #{inc}, ENCORE_PRIMITIVE);
+               par_t* p = delay_extract(_ctx, ast3, ENCORE_PRIMITIVE);
+               p;
+             END
+    for x <- p3 do
+      println("Number: {}", x)
+    end
+  end
+
+  def main(): unit
+    this.sequence()
+    this.distinct()
+    this.each()
+    this.eachDistinct()
+    this.testRecomputation()
+    this.testCache()
   end
 end
 

@@ -98,6 +98,7 @@ typedef enum AST_PAR_FLAG
 typedef struct ast_delay_t
 {
   delay_t *expr;
+  void *result;
   pony_type_t const * type;
   bool linear;
 } ast_delay_t;
@@ -350,7 +351,7 @@ delayed_par_t*
 delay_cache_ast(pony_ctx_t **ctx, delayed_par_t *ast)
 {
   (void) ctx;
-  __atomic_test_and_set((void*)ast->cached, __ATOMIC_RELAXED);
+  __atomic_test_and_set(&ast->cached, __ATOMIC_RELAXED);
   return ast;
 }
 
@@ -396,7 +397,7 @@ delay_each(pony_ctx_t **ctx, delay_t * const val, pony_type_t const * const type
  * given as input a realised ParT. Basically, this interpreter glues together
  * delayed ParTs as AST nodes with realised ParTs that are possibly running.
  *
- * precondition: values[0] must be a realised ParT.
+ * precondition: values[0] must be a realised ParT
  * precondition: values[1] must be a delayed_par_t that contains the expresion (closure)
  *               to run on the items of the ParT
  *
@@ -410,7 +411,7 @@ static inline delayed_par_t*
 interpreter_to_realised_ast_expr_par(pony_ctx_t **ctx, void ** values, pony_type_t *type)
 {
   (void) type;
-  par_t *result = values[0];
+  void *result = values[0];
   delayed_par_t *ast = values[1];
   ast_expr_t *ast_expr = ast->v.ast_expr;
   AST_COMBINATOR tag = ast_expr->tag;
@@ -421,16 +422,18 @@ interpreter_to_realised_ast_expr_par(pony_ctx_t **ctx, void ** values, pony_type
     case AST_C_SEQUENCE: {
       par_t *ps = party_sequence(ctx, result, (void*) e, rtype);
       return new_delay_par_value(ctx, ps, party_get_type(ps));
-      break;
     }
     case AST_C_JOIN: {
-      break;
+      par_t *pj = party_join(ctx, result);
+      return new_delay_par_value(ctx, pj, party_get_type(pj));
     }
     case AST_C_EACH: {
-      break;
+      // result is: each([t]) : Par[t]. this is already a realised ParT.
+      return new_delay_par_value(ctx, (par_t *) result, party_get_type(result));
     }
     case AST_C_DISTINCT: {
-      break;
+      par_t *pd = party_distinct(ctx, result, (void *) e, rtype);
+      return new_delay_par_value(ctx, pd, party_get_type(pd));
     }
     default: {
       exit(-1);
@@ -439,6 +442,18 @@ interpreter_to_realised_ast_expr_par(pony_ctx_t **ctx, void ** values, pony_type
   exit(-1);
 }
 
+
+/** interpret an AST node where the input values have not been realised yet
+ *
+ * Interprets an AST node, recursively, until it cannot be reduced, i.e. realised
+ * anymore. A realised node is one that has the form of a `par_t*`.
+ *
+ * @param ctx Context.
+ * @param ast a `delayed_par_t*` that contains the expression to, possibly, realised
+.*            e.g. delay(34) >> e1, unevaluated.
+ * @param type Runtime type.
+ * @return Delayed ParT that contains ongoing computations, i.e. wrapper around a ParT.
+ */
 delayed_par_t*
 interpreter_to_realised_delayed_party(pony_ctx_t **ctx, delayed_par_t * ast, pony_type_t *type)
 {
@@ -456,9 +471,49 @@ interpreter_to_realised_delayed_party(pony_ctx_t **ctx, delayed_par_t * ast, pon
         break;
       }
       case AST_DELAY_PAR_VALUE: {
+        // TODO: it seems almost like a copy-paste from AST_EXPR_PAR
+        bool cached = __atomic_load_n(&ast->cached, __ATOMIC_ACQUIRE);
+
         ast_delay_t *delay_value = ast->v.ast_par;
-        par_t *p = (par_t*) closure_call(ctx, (closure_t*) delay_value->expr, (value_t[]){}).p;
-        seed_par = new_par_p(ctx, seed_par, p, &party_type);
+
+        if (cached) {
+          bool running = __atomic_exchange_n(&ast->running, true, __ATOMIC_ACQ_REL);
+
+          if (!running) {
+
+            // Then we run the computation and save
+            void *par = closure_call(ctx, (closure_t*) delay_value->expr, (value_t[]){}).p;
+            __atomic_store(&delay_value->result, &par, __ATOMIC_RELEASE);
+            seed_par = new_par_p(ctx, seed_par, par, &party_type);
+
+          } else {
+
+            // we wait for the result or the result is already there
+            // NOTE: isn't result.p already `void*`. the compiler doesn't let me.
+            par_t *result = __atomic_load_n(&delay_value->result, __ATOMIC_ACQUIRE);
+
+            if (!result) {
+
+              // result has not been set yet.
+
+              // Either attach computation to be run by the other thread or block.
+              // This is difficult because by the time I attach the computation,
+              // the other thread may already have exit.
+
+              // TODO:
+              (void)NULL;
+              exit(-1);
+
+            } else {
+              // there is a result
+              seed_par = new_par_p(ctx, seed_par, result, &party_type);
+            }
+          }
+        } else {
+          par_t *p = (par_t*) closure_call(ctx, (closure_t*) delay_value->expr, (value_t[]){}).p;
+          seed_par = new_par_p(ctx, seed_par, p, &party_type);
+        }
+
         STACK_POP(stack, ast);
         break;
       }
@@ -469,20 +524,29 @@ interpreter_to_realised_delayed_party(pony_ctx_t **ctx, delayed_par_t * ast, pon
         break;
       }
       case AST_EXPR_PAR: {
-        // TODO: ast->cached; tb hace falta saber si alguien esta running esta computation.
+        // TODO: quite similar to AST_DELAY_PAR_VALUE
         bool cached = __atomic_load_n(&ast->cached, __ATOMIC_ACQUIRE);
         ast_expr_t *ast_expr = ast->v.ast_expr;
 
         if (cached) {
           bool running = __atomic_exchange_n(&ast->running, true, __ATOMIC_ACQ_REL);
+
           if (!running) {
-            // Then we run the computation
-            // TODO:
-            exit(-1);
-          } else {  // we wait for the result or the result is already there
+
+            // Then we run the computation and save
+            par_t *p = (par_t*) closure_call(ctx, (closure_t*) ast_expr->expr, (value_t[]){}).p;
+            void *result = ast_expr->result.p;
+            __atomic_store(&result, (void**)&p, __ATOMIC_RELEASE);
+            seed_par = new_par_p(ctx, seed_par, p, &party_type);
+
+          } else {
+
+            // we wait for the result or the result is already there
             // NOTE: isn't result.p already `void*`. the compiler doesn't let me.
             void *result = __atomic_load_n(&ast_expr->result.p, __ATOMIC_ACQUIRE);
+
             if (!result) {
+
               // result has not been set yet.
 
               // Either attach computation to be run by the other thread or block.
@@ -492,12 +556,15 @@ interpreter_to_realised_delayed_party(pony_ctx_t **ctx, delayed_par_t * ast, pon
               // TODO:
               (void)NULL;
               exit(-1);
-            } else { // there is a result
+
+            } else {
+              // there is a result
               delayed_par_t *party =  interpreter_to_realised_ast_expr_par(ctx, (void*[]){result, ast}, type);
               seed_par = new_par_p(ctx, seed_par, party->v.par, &party_type);
             }
           }
-        } else { // run all computations again.
+        } else {
+          // not cached, run all computations
           // e.g. (delay f() || delay(f())) >> foo
           // start by interpreting the inner AST, a.k.a. (delay f() || delay(f()))
           // return a ParT (it may be fully realised or with ongoing computations)
@@ -531,44 +598,9 @@ interpreter_to_realised_delayed_party(pony_ctx_t **ctx, delayed_par_t * ast, pon
 array_t*
 delay_extract(pony_ctx_t **ctx, delayed_par_t *ast, pony_type_t *type)
 {
-  stack_s *stack = NULL;
   par_t *seed_par = new_par_empty(ctx, type);
-
-  while(ast){
-    switch(ast->flag){
-      case AST_PAR_VALUE: {
-        seed_par = new_par_p(ctx, seed_par, ast->v.par, &party_type);
-        STACK_POP(stack, ast);
-        break;
-      }
-      case AST_DELAY_PAR_VALUE: {
-        ast_delay_t *delay_value = ast->v.ast_par;
-        par_t *p = (par_t*) closure_call(ctx, (closure_t*) delay_value->expr, (value_t[]){}).p;
-        seed_par = new_par_p(ctx, seed_par, p, &party_type);
-        STACK_POP(stack, ast);
-        break;
-      }
-      case AST_DELAY_TREE: {
-        ast_delay_par_t *delay_par = ast->v.ast_tree;
-        STACK_PUSH(stack, delay_par->right);
-        ast = delay_par->left;
-        break;
-      }
-      case AST_EXPR_PAR: {
-        delayed_par_t *p = interpreter_to_realised_delayed_party(ctx, ast, type);
-        seed_par = new_par_p(ctx, seed_par, p->v.par, &party_type);
-        STACK_POP(stack, ast);
-        break;
-      }
-      case AST_EXPR_TWO_PAR_SRC: {
-        break;
-      }
-      case AST_EXPR_REDUCE: {
-        break;
-      }
-    }
-  }
-  return party_extract(ctx, seed_par, party_get_type(seed_par));
+  delayed_par_t *p = interpreter_to_realised_delayed_party(ctx, ast, type);
+  return party_extract(ctx,  p->v.par, party_get_type(seed_par));
 }
 
 // NOTE: `init` is a realised value. is there any advantage / use case for a

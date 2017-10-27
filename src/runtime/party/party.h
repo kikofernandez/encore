@@ -180,6 +180,7 @@ run_delay_par(pony_ctx_t **ctx, delayed_par_t *p);
 #define new_delay_par_value(ctx, VAL, runtime_type)  _Generic((VAL), \
            par_t * : new_delayed_realised_par_value, \
            delay_t * : new_delayed_par_value, \
+           array_t * : delay_each, \
            default: new_delayed_par_value \
           )(ctx, VAL, runtime_type)
 
