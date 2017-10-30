@@ -738,17 +738,15 @@ interpreter_to_realised_delayed_party(pony_ctx_t **ctx, delayed_par_t * ast, pon
     }
   }
 
-  array_t *ar = party_extract(ctx, seed_par, party_get_type(seed_par));
-  par_t *parResult = new_par_array(ctx, ar, array_get_type(ar));
-  return new_delay_par_value(ctx, parResult, party_get_type(parResult));
+  return new_delay_par_value(ctx, seed_par, party_get_type(seed_par));
 }
 
 array_t*
 delay_extract(pony_ctx_t **ctx, delayed_par_t *ast, pony_type_t *type)
 {
-  par_t *seed_par = new_par_empty(ctx, type);
-  delayed_par_t *p = interpreter_to_realised_delayed_party(ctx, ast, type);
-  return party_extract(ctx,  p->v.par, party_get_type(seed_par));
+  // the result is a ParT wrapped in a delay structure.
+  delayed_par_t *d = interpreter_to_realised_delayed_party(ctx, ast, type);
+  return party_extract(ctx, d->v.par, type);
 }
 
 // NOTE: `init` is a realised value. is there any advantage / use case for a

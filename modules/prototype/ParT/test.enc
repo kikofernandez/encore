@@ -92,7 +92,6 @@ active class Main
   end
 
   def eachDistinct(): unit
-    -- Testing each and distinct
     println("Test: each distinct")
     val p11 = gen
     val p12 = gen2
@@ -198,10 +197,10 @@ active class Main
     end
 
     println("Test: intersection.")
-    val p11 = gen
+    val p11 = eachBasedParT()
     val p12 = gen2
     val p3 = EMBED ([int])
-               delayed_par_t *ast = new_delay_par_value(_ctx, (delay_t*) #{p11}, ENCORE_PRIMITIVE);
+               delayed_par_t *ast = new_delay_par_value(_ctx, (par_t*) #{p11}, ENCORE_PRIMITIVE);
                delayed_par_t *ast2 = new_delay_par_value(_ctx, (delay_t*) #{p12}, ENCORE_PRIMITIVE);
                ast = delay_intersection(_ctx, ast, ast2, #{cmp}, ENCORE_PRIMITIVE);
                array_t* p = delay_extract(_ctx, ast, ENCORE_PRIMITIVE);
@@ -215,8 +214,8 @@ active class Main
     val p11 = eachBasedParT()
     val p12 = eachBasedParT()
     val p3 = EMBED ([int])
-               delayed_par_t *ast = new_delay_par_value(_ctx, (delay_t*) #{p11}, ENCORE_PRIMITIVE);
-               delayed_par_t *ast2 = new_delay_par_value(_ctx, (delay_t*) #{p12}, ENCORE_PRIMITIVE);
+               delayed_par_t *ast = new_delay_par_value(_ctx, (par_t*) #{p11}, ENCORE_PRIMITIVE);
+               delayed_par_t *ast2 = new_delay_par_value(_ctx, (par_t*) #{p12}, ENCORE_PRIMITIVE);
                ast = delay_zip_with(_ctx, ast, ast2, #{sum}, ENCORE_PRIMITIVE);
                array_t* p = delay_extract(_ctx, ast, ENCORE_PRIMITIVE);
                p;
@@ -236,7 +235,7 @@ active class Main
     this.testCache()
     this.testReduce()
     this.intersection()
-    -- this.zip()
+    this.zip()
   end
 end
 
