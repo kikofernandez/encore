@@ -559,46 +559,9 @@ interpreter_to_realised_delayed_party(pony_ctx_t **ctx, delayed_par_t * ast, pon
         break;
       }
       case AST_DELAY_PAR_VALUE: {
-        bool cached = __atomic_load_n(&ast->cached, __ATOMIC_ACQUIRE);
         ast_delay_t *delay_value = ast->v.ast_par;
-
-        if (cached) {
-          bool running = __atomic_exchange_n(&ast->running, true, __ATOMIC_ACQ_REL);
-
-          if (!running) {
-
-            // Then we run the computation and save
-            void *par = closure_call(ctx, (closure_t*) delay_value->expr, (value_t[]){}).p;
-            __atomic_store(&delay_value->result, &par, __ATOMIC_RELEASE);
-            seed_par = new_par_p(ctx, seed_par, par, &party_type);
-
-          } else {
-
-            // we wait for the result or the result is already there
-            // NOTE: isn't result.p already `void*`. the compiler doesn't let me.
-            par_t *result = __atomic_load_n(&delay_value->result, __ATOMIC_ACQUIRE);
-
-            if (!result) {
-
-              // result has not been set yet.
-
-              // Either attach computation to be run by the other thread or block.
-              // This is difficult because by the time I attach the computation,
-              // the other thread may already have exit.
-
-              // TODO:
-              (void)NULL;
-              exit(-1);
-
-            } else {
-              // there is a result
-              seed_par = new_par_p(ctx, seed_par, result, &party_type);
-            }
-          }
-        } else {
-          par_t *p = (par_t*) closure_call(ctx, (closure_t*) delay_value->expr, (value_t[]){}).p;
-          seed_par = new_par_p(ctx, seed_par, p, &party_type);
-        }
+        par_t *p = (par_t*) closure_call(ctx, (closure_t*) delay_value->expr, (value_t[]){}).p;
+        seed_par = new_par_p(ctx, seed_par, p, &party_type);
 
         STACK_POP(stack, ast);
         break;
@@ -610,165 +573,42 @@ interpreter_to_realised_delayed_party(pony_ctx_t **ctx, delayed_par_t * ast, pon
         break;
       }
       case AST_EXPR_PAR: {
-        // TODO: quite similar to AST_DELAY_PAR_VALUE
-        bool cached = __atomic_load_n(&ast->cached, __ATOMIC_ACQUIRE);
         ast_expr_t *ast_expr = ast->v.ast_expr;
 
-        if (cached) {
-          bool running = __atomic_exchange_n(&ast->running, true, __ATOMIC_ACQ_REL);
+        // e.g. (delay f() || delay(f())) >> foo
+        // start by interpreting the inner AST, a.k.a. (delay f() || delay(f()))
+        // return a ParT (it may be fully realised or with ongoing computations)
+        delayed_par_t *dp = interpreter_to_realised_delayed_party(ctx, ast_expr->ast, ast_expr->type);
 
-          if (!running) {
+        // take ParT and apply pending computations, ParT >> foo
+        delayed_par_t *party = interpreter_to_realised_ast_expr_par(ctx, (void*[]){dp->v.par, ast}, type);
 
-            // Then we run the computation and save
-            delayed_par_t *dp = interpreter_to_realised_delayed_party(ctx, ast_expr->ast, ast_expr->type);
+        // add result to ongoing seed / result value
+        seed_par = new_par_p(ctx, seed_par, party->v.par, &party_type);
 
-            // take ParT and apply pending computations, ParT >> foo
-            delayed_par_t *party = interpreter_to_realised_ast_expr_par(ctx, (void*[]){dp->v.par, ast}, type);
-
-            // cached computations
-            __atomic_store((void**) &ast_expr->result.p, (void **) &party->v.par, __ATOMIC_RELEASE);
-
-            // add result to ongoing seed / result value
-            seed_par = new_par_p(ctx, seed_par, party->v.par, &party_type);
-          } else {
-
-            // we wait for the result or the result is already there
-            // NOTE: isn't result.p already `void*`. the compiler doesn't let me.
-            void *result = __atomic_load_n(&ast_expr->result.p, __ATOMIC_ACQUIRE);
-
-            if (!result) {
-
-              // result has not been set yet.
-
-              // Either attach computation to be run by the other thread or block.
-              // This is difficult because by the time I attach the computation,
-              // the other thread may already have exit.
-
-              // TODO:
-              (void)NULL;
-              exit(-1);
-
-            } else {
-              // there is a result
-              delayed_par_t *party =  interpreter_to_realised_ast_expr_par(ctx, (void*[]){result, ast}, type);
-              seed_par = new_par_p(ctx, seed_par, party->v.par, &party_type);
-            }
-          }
-        } else {
-          // not cached, run all computations
-          // e.g. (delay f() || delay(f())) >> foo
-          // start by interpreting the inner AST, a.k.a. (delay f() || delay(f()))
-          // return a ParT (it may be fully realised or with ongoing computations)
-          delayed_par_t *dp = interpreter_to_realised_delayed_party(ctx, ast_expr->ast, ast_expr->type);
-
-          // take ParT and apply pending computations, ParT >> foo
-          delayed_par_t *party = interpreter_to_realised_ast_expr_par(ctx, (void*[]){dp->v.par, ast}, type);
-
-          // add result to ongoing seed / result value
-          seed_par = new_par_p(ctx, seed_par, party->v.par, &party_type);
-        }
         STACK_POP(stack, ast);
         break;
       }
       case AST_EXPR_TWO_PAR_SRC: {
-        // TODO: quite similar to AST_DELAY_PAR_VALUE
-        bool cached = __atomic_load_n(&ast->cached, __ATOMIC_ACQUIRE);
         ast_two_par_tsource_t *ast_two = ast->v.ast_twosource;
+        delayed_par_t *left = interpreter_to_realised_delayed_party(ctx, ast_two->left, ast_two->type);
+        delayed_par_t *right = interpreter_to_realised_delayed_party(ctx, ast_two->right, ast_two->type);
+        delayed_par_t *party = interpreter_to_realised_ast_two_par(ctx, (void*[]){left->v.par, right->v.par, ast}, type);
+        seed_par = new_par_p(ctx, seed_par, party->v.par, &party_type);
 
-        if (cached) {
-          bool running = __atomic_exchange_n(&ast->running, true, __ATOMIC_ACQ_REL);
-
-          if (!running) {
-            // Then we run the computation and save
-            delayed_par_t *left = interpreter_to_realised_delayed_party(ctx, ast_two->left, ast_two->type);
-            delayed_par_t *right = interpreter_to_realised_delayed_party(ctx, ast_two->right, ast_two->type);
-            delayed_par_t *party = interpreter_to_realised_ast_two_par(ctx, (void*[]){left->v.par, right->v.par, ast}, type);
-
-            // cached computations
-            // TODO: think!
-            // we cached computations in the left node... we may need to add a new
-            // result that caches the result of both? (it's Friday...)
-            __atomic_store((void**) &ast_two->result_left, (void **) &party->v.par, __ATOMIC_RELEASE);
-            // add result to ongoing seed / result value
-            seed_par = new_par_p(ctx, seed_par, party->v.par, &party_type);
-          } else {
-            // we wait for the result or the result is already there
-            // NOTE: isn't result.p already `void*`. the compiler doesn't let me.
-            void *result_left = __atomic_load_n(&ast_two->result_left.p, __ATOMIC_ACQUIRE);
-            void *result_right = __atomic_load_n(&ast_two->result_right.p, __ATOMIC_ACQUIRE);
-            if (!result_left || !result_right) {
-
-              // result has not been set yet.
-
-              // Either attach computation to be run by the other thread or block.
-              // This is difficult because by the time I attach the computation,
-              // the other thread may already have exit.
-
-              // TODO:
-              (void)NULL;
-              exit(-1);
-
-            } else {
-              // there is a result
-              delayed_par_t *party = interpreter_to_realised_ast_two_par(ctx, (void*[]){result_left, result_right, ast}, type);
-              seed_par = new_par_p(ctx, seed_par, party->v.par, &party_type);
-            }
-          }
-        } else {
-          // TODO: Error here somewhere.
-          delayed_par_t *left = interpreter_to_realised_delayed_party(ctx, ast_two->left, ast_two->type);
-          delayed_par_t *right = interpreter_to_realised_delayed_party(ctx, ast_two->right, ast_two->type);
-          delayed_par_t *party = interpreter_to_realised_ast_two_par(ctx, (void*[]){left->v.par, right->v.par, ast}, type);
-          seed_par = new_par_p(ctx, seed_par, party->v.par, &party_type);
-        }
         STACK_POP(stack, ast);
         break;
       }
       case AST_EXPR_REDUCE: {
-        // TODO: quite similar to AST_DELAY_PAR_VALUE
-        bool cached = __atomic_load_n(&ast->cached, __ATOMIC_ACQUIRE);
         ast_reduce_t *ast_red = ast->v.ast_reduce;
+        delayed_par_t *dp = interpreter_to_realised_delayed_party(ctx, ast_red->ast, ast_red->type);
 
-        if (cached) {
-          bool running = __atomic_exchange_n(&ast->running, true, __ATOMIC_ACQ_REL);
+        // take ParT and apply pending computations, ParT >> foo
+        delayed_par_t *party = interpreter_to_realised_ast_reduce_par(ctx, (void*[]){dp->v.par, ast}, type);
 
-          if (!running) {
-            // Then we run the computation and save
-            delayed_par_t *dp = interpreter_to_realised_delayed_party(ctx, ast_red->ast, ast_red->type);
-            delayed_par_t *party = interpreter_to_realised_ast_reduce_par(ctx, (void*[]){dp->v.par, ast}, type);
-            // cached computations
-            __atomic_store((void**) &ast_red->result.p, (void **) &party->v.par, __ATOMIC_RELEASE);
-            // add result to ongoing seed / result value
-            seed_par = new_par_p(ctx, seed_par, party->v.par, &party_type);
-          } else {
-            // we wait for the result or the result is already there
-            // NOTE: isn't result.p already `void*`. the compiler doesn't let me.
-            void *result = __atomic_load_n(&ast_red->result.p, __ATOMIC_ACQUIRE);
-            if (!result) {
+        // add result to ongoing seed / result value
+        seed_par = new_par_p(ctx, seed_par, party->v.par, &party_type);
 
-              // result has not been set yet.
-
-              // Either attach computation to be run by the other thread or block.
-              // This is difficult because by the time I attach the computation,
-              // the other thread may already have exit.
-
-              // TODO:
-              (void)NULL;
-              exit(-1);
-
-            } else {
-              // there is a result
-              delayed_par_t *party =  interpreter_to_realised_ast_reduce_par(ctx, (void*[]){result, ast}, type);
-              seed_par = new_par_p(ctx, seed_par, party->v.par, &party_type);
-            }
-          }
-        } else {
-          delayed_par_t *dp = interpreter_to_realised_delayed_party(ctx, ast_red->ast, ast_red->type);
-          // take ParT and apply pending computations, ParT >> foo
-          delayed_par_t *party = interpreter_to_realised_ast_reduce_par(ctx, (void*[]){dp->v.par, ast}, type);
-          // add result to ongoing seed / result value
-          seed_par = new_par_p(ctx, seed_par, party->v.par, &party_type);
-        }
         STACK_POP(stack, ast);
         break;
       }
@@ -801,11 +641,12 @@ interpreter_to_realised_delayed_party(pony_ctx_t **ctx, delayed_par_t * ast, pon
 
             } else {
               // there is a result
-              delayed_par_t *party = result;
-              seed_par = new_par_p(ctx, seed_par, party->v.par, &party_type);
+              par_t *party = result;
+              seed_par = new_par_p(ctx, seed_par, party, &party_type);
             }
-          }
-
+         }
+         STACK_POP(stack, ast);
+         break;
       }
     }
   }
