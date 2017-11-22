@@ -42,7 +42,8 @@ typedef enum AST_COMBINATOR {
   AST_C_DISTINCT,
   AST_C_INTERSECTION,
   AST_C_GROUPBY,
-  AST_C_ZIP
+  AST_C_ZIP,
+  AST_C_CACHE,
 } AST_COMBINATOR;
 
 // NOTE: I believe this could be internal to the struct, not internal to the file
@@ -54,7 +55,8 @@ typedef enum AST_PAR_FLAG
   AST_EXPR_REDUCE, // Matches ast_reduce_t* in `v`
   AST_DELAY_TREE, // Matches ast_delay_par_t* in `v`
   AST_DELAY_PAR_VALUE, // Matches a ast_delay_t* value, i.e. delay
-  AST_PAR_VALUE      // Matches a par_t* that is not "delayed"
+  AST_PAR_VALUE,      // Matches a par_t* that is not "delayed"
+  AST_DELAY_PAR_CACHE // matches an ast_delay_par_t* in `v` where the result should be cached
 } AST_PAR_FLAG;
 
 /*
@@ -86,6 +88,11 @@ typedef enum AST_PAR_FLAG
 
 */
 
+typedef enum ModeExpr {
+  MODE_LINEAR,
+  MODE_READ
+} ModeExpr;
+
 // NOTE: should linear be an enum mode: LINEAR, ACTOR, READ (only these modes make sense in the ParT)
 #define DEFINE_AST(NAME, RESULT) \
     delayed_par_t *NAME; \
@@ -93,26 +100,27 @@ typedef enum AST_PAR_FLAG
     pony_type_t * type; \
     value_t RESULT; \
     enum AST_COMBINATOR tag; \
-    bool linear; \
 
 typedef struct ast_delay_t
 {
   delay_t *expr;
   void *result;
   pony_type_t const * type;
-  bool linear;
+  ModeExpr mode; // mode of the result of expr
 } ast_delay_t;
 
 typedef struct ast_expr_t
 {
   DEFINE_AST(ast, result)
+  ModeExpr mode;
   char padding[3];
 } ast_expr_t;
 
 typedef struct ast_reduce_t
 {
-  // ignore the AST_CONBINATOR for the reduce case.
+  // ignore the AST_COMBINATOR for the reduce case.
   DEFINE_AST(ast, result)
+  ModeExpr mode;
   encore_arg_t init; // TODO: this is a realised value. should it be delayed?
   pony_type_t *initType;
 } ast_reduce_t;
@@ -122,6 +130,7 @@ typedef struct ast_two_par_tsource_t
   delayed_par_t *right;
   value_t result_right;
   DEFINE_AST(left, result_left)
+  ModeExpr mode;
   char padding[3];
 } ast_two_par_tsource_t;
 
@@ -130,7 +139,17 @@ typedef struct ast_delay_par_t
   delayed_par_t *left;
   delayed_par_t *right;
   pony_type_t *type;
+  ModeExpr mode; // mode of the resulting delayed ParT
 } ast_delay_par_t;
+
+typedef struct ast_cached_delay_par_t
+{
+  delayed_par_t *delayed;
+  value_t result;
+  pony_type_t *type; // tracing of the resulting type
+  ModeExpr mode; // mode of result value
+  bool running;
+} ast_cached_delay_par_t;
 
 typedef struct delayed_par_t {
     union ParT {
@@ -159,6 +178,9 @@ typedef struct delayed_par_t {
 
       // a realised ParT value: v_1 || v_2
       par_t *par;
+
+      // cached expression
+      ast_cached_delay_par_t *cached;
     } v;
 
     // runtime type of the result produced by the AST node. NOT the tracing type!
@@ -240,6 +262,11 @@ void party_delay_trace(pony_ctx_t* ctx, void* p)
       party_delay_trace(ctx, ast->v.ast_tree->right);
       break;
     }
+    case AST_DELAY_PAR_CACHE: {
+      party_delay_trace(ctx, ast->v.cached);
+      encore_trace_object(ctx, ast->v.cached->result.p, ast->v.cached->type->trace);
+      break;
+    }
   }
 }
 
@@ -273,6 +300,10 @@ ast_get_type(delayed_par_t *ast)
       assert(ast->type == party_get_type(ast->v.par));
       return party_get_type(ast->v.par);
     }
+    case AST_DELAY_PAR_CACHE: {
+      assert(ast->type == ast->v.cached->type);
+      return ast->v.cached->type;
+    }
   }
 }
 
@@ -300,7 +331,7 @@ new_delayed_par_value(pony_ctx_t **ctx, delay_t * const val, pony_type_t const *
   ast_delay_t *const delay_expr = encore_alloc(*ctx, sizeof* delay_expr);
   *delay_expr = (ast_delay_t){.expr = val,
                               .type = rtype,
-                              .linear=false};
+                              .mode=MODE_READ};
   return new_delay_par(AST_DELAY_PAR_VALUE, rtype, delay_expr);
 }
 
@@ -328,7 +359,7 @@ new_expr_ast(pony_ctx_t **ctx, delayed_par_t *ast, closure_t* const closure,
 {
   ast_expr_t *expr_node = encore_alloc(*ctx, sizeof* expr_node);
   *expr_node = (ast_expr_t) {.tag = combinator,
-                             .linear = false,
+                             .mode = MODE_READ,
                              .expr = (delay_t *) closure,
                              .type = rtype,
                              .ast = ast};
@@ -341,7 +372,7 @@ new_two_par_source_ast(pony_ctx_t **ctx, delayed_par_t *ast_left, delayed_par_t 
 {
   ast_two_par_tsource_t *expr_node = encore_alloc(*ctx, sizeof* expr_node);
   *expr_node = (ast_two_par_tsource_t) {.tag = combinator,
-                                        .linear = false,
+                                        .mode = MODE_READ,
                                         .expr = (delay_t *) closure,
                                         .type = type,
                                         .left = ast_left,
@@ -357,12 +388,18 @@ delay_cache_realised_part(pony_ctx_t **ctx, delayed_par_t *par)
   return par;
 }
 
+// TODO: this should be a new structure that potentially contains the result.
+//       remove the lineage from it.
 delayed_par_t*
 delay_cache_ast(pony_ctx_t **ctx, delayed_par_t *ast)
 {
-  (void) ctx;
-  __atomic_test_and_set(&ast->cached, __ATOMIC_RELAXED);
-  return ast;
+  ast_cached_delay_par_t *expr_node = encore_alloc(*ctx, sizeof* expr_node);
+  *expr_node = (ast_cached_delay_par_t) {.mode = MODE_READ,
+                                         .delayed = ast,
+                                         .result = {.p = NULL},
+                                         .running = false,
+                                         .type = ast->type};
+  return new_delay_par(AST_DELAY_PAR_CACHE, ast->type, expr_node);
 }
 
 delayed_par_t*
@@ -403,8 +440,8 @@ delay_each(pony_ctx_t **ctx, delay_t * const val, pony_type_t const * const type
 
 /** interpret expression where the input values have already been realised
  *
- * Interprets an expression (which we know can only be >>, join, each or distinct),
- * given as input a realised ParT. Basically, this interpreter glues together
+ * Interprets an expression (which we know can only be >>, join, each or distinct);
+ * input is a realised ParT. Basically, this interpreter glues together
  * delayed ParTs as AST nodes with realised ParTs that are possibly running.
  *
  * precondition: values[0] must be a realised ParT
@@ -735,6 +772,41 @@ interpreter_to_realised_delayed_party(pony_ctx_t **ctx, delayed_par_t * ast, pon
         STACK_POP(stack, ast);
         break;
       }
+      case AST_DELAY_PAR_CACHE: {
+         ast_cached_delay_par_t *ast_cached = ast->v.cached;
+         bool running = __atomic_exchange_n(&ast_cached->running, true, __ATOMIC_ACQ_REL);
+
+         if (!running) {
+           // Then we run the computation and save
+           delayed_par_t *party = interpreter_to_realised_delayed_party(ctx, ast_cached->delayed, ast_cached->type);
+           // cached computations
+           __atomic_store((void**) &ast_cached->result.p, (void **) &party->v.par, __ATOMIC_RELEASE);
+           // add result to ongoing seed / result value
+           seed_par = new_par_p(ctx, seed_par, party->v.par, &party_type);
+         } else {
+            // we wait for the result or the result is already there
+            // NOTE: isn't result.p already `void*`. the compiler doesn't let me.
+            void *result = __atomic_load_n(&ast_cached->result.p, __ATOMIC_ACQUIRE);
+            if (!result) {
+
+              // result has not been set yet.
+
+              // Either attach computation to be run by the other thread or block.
+              // This is difficult because by the time I attach the computation,
+              // the other thread may already have exit.
+
+              // TODO:
+              (void)NULL;
+              exit(-1);
+
+            } else {
+              // there is a result
+              delayed_par_t *party = result;
+              seed_par = new_par_p(ctx, seed_par, party->v.par, &party_type);
+            }
+          }
+
+      }
     }
   }
 
@@ -758,7 +830,7 @@ delay_reduce(pony_ctx_t **ctx, delayed_par_t * const ast, encore_arg_t init,
 {
   ast_reduce_t *expr_node = encore_alloc(*ctx, sizeof* expr_node);
   *expr_node = (ast_reduce_t) {.tag = AST_C_REDUCE,
-                               .linear = false,
+                               .mode = MODE_READ,
                                .expr = (delay_t *) closure,
                                .type = resultType,
                                .ast = ast,
