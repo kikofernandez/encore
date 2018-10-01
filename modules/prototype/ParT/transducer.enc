@@ -1,0 +1,131 @@
+fun comp[t, t', t''](f: t' -> t'', g: t -> t'): t -> t''
+  fun (x: t) => f(g(x))
+end
+
+typedef Trans = ((int, int) -> int) -> ((int, int) -> int)
+
+fun map(fn : int -> int): Trans
+  fun (rf : (int, int) -> int): (int, int) -> int
+    fun (result: int, input: int) => rf(result, fn(input))
+  end
+end
+
+fun take(items: int): ((int, int) -> int) -> ((int, int) -> int)
+  fun (rf : (int, int) -> int) : (int, int) -> int
+    fun (result: int, input: int) : int
+      EMBED (unit)
+      _enc__field_items = __atomic_fetch_sub(&((struct _enc__env_closure3*) _env)->_enc__field_items, 1, __ATOMIC_ACQ_REL);
+      END
+      if (items >= 1) then
+        rf(result, input)
+      else
+        result
+      end
+    end
+  end
+end
+
+-- not that easy because of the types...
+-- fun bind(fn: int -> [int]): ((int, int) -> int) -> ((int, int) -> int)
+-- end
+
+fun filtr(pred : int -> bool): Trans
+  fun (rf : (int, int) -> int): (int, int) -> int
+    fun (result: int, input: int) : int
+      if pred(input) then
+        rf(result, input)
+      else
+        result
+      end
+    end
+  end
+end
+
+-- fun delay(rf: (int, int) -> int): ((int, int) -> int)
+--     fun (result: int, input: int): int
+--       rf(result, input)
+--     end
+--   end
+-- end
+
+-- fun resume(fn: () -> ((int, int) -> int)): Trans
+--   fun (rf: (int, int) -> int): ((int, int) -> int)
+--     fun (result: int, input: int): int
+--        val extractedFn = fn()
+--        extractedFn(result, input)
+--     end
+--   end
+-- end
+
+fun inc(x: int): int
+  x + 5
+end
+
+fun dec(x: int): int
+  x -1
+end
+
+fun sum(acc: int, input: int): int
+  acc + input
+end
+
+fun reduc[t, t'](coll: [t], f: (t', t) -> t', var init: t'): t'
+  for item <- coll do
+    init = f(init, item)
+  end
+  return init
+end
+
+fun step(xform: Trans, f: (int, int) -> int, init: int, coll: [int]): (int, () -> int)
+  val f = xform(f)
+  val index = 0
+  val size = |coll|
+  val result = f(init, coll(index))
+  val fn = fun (): int
+             EMBED (unit)
+               _enc__field_index = __atomic_fetch_add(&((struct _enc__env_closure0*) _env)->_enc__field_index, 1, __ATOMIC_RELAXED);
+               _enc__field_result = __atomic_load_n(&((struct _enc__env_closure0*) _env)->_enc__field_result, __ATOMIC_RELAXED);
+             END
+             val result = f(result, coll(index))
+             EMBED (unit)
+               ((struct _enc__env_closure0*) _env)->_enc__field_result = #{result};
+             END
+             result
+           end
+  (result, fn)
+end
+
+fun odd(x: int): bool
+  if x % 2 == 0 then
+    false
+  else
+    true
+  end
+end
+
+fun transduce(xform: Trans, f: (int, int) -> int, init: int, coll: [int]): int
+  val f = xform(f)
+  reduc(coll, f, init)
+end
+
+active class Main
+  def main(): unit
+    val xform = comp(map(inc), map(dec))
+    -- val xxform = comp(filtr(odd), xform)
+    val xxform = comp(take(2), xform)
+    -- val xform2 = comp(resume, xform1)
+    -- val fn = xform(sum)
+    -- println(fn())
+    -- val xxform = comp(resume, xform)
+
+    -- Functional transducer, can be shared!
+    -- In Clojure, they keep state around, which means, do not share
+    -- your xform, use and discard.
+    println(transduce(xxform, sum, 0, [1, 2, 3]))
+
+    val oneT = step(xform, sum, 0, [1, 2, 3])
+    val fn = oneT.1
+    val two = fn()
+    println("First item: {}\t second: {}", oneT.0, two)
+  end
+end
