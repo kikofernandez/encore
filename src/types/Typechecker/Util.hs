@@ -57,7 +57,6 @@ import Data.Maybe
 import Text.Printf (printf)
 import Debug.Trace
 import Control.Monad.Reader
-import Control.Monad.Except
 import Control.Arrow(second)
 import Control.Monad.State
 
@@ -103,12 +102,24 @@ concatMapM op = foldr f (return [])
 -- of return type @TypecheckM Bar@ may read from an 'Environment'
 -- and returns a @Bar@ or throws a typechecking exception.
 type TypecheckM a =
-    forall m . (MonadState [TCWarning] m,
-                MonadError TCError m,
+    forall m . (MonadState ([TCError], [TCWarning]) m,
                 MonadReader Environment m) => m a
+
+-- runExcept e =
+--   case flip runState ([],[]) e of
+--     (program, ([], ws)) -> (Right program, ws)
+--     (_, (x:xs, ws))     -> (Left $ x:xs, ws)
+
+throwError :: TCError -> TypecheckM a
+throwError t = state (\(errs, ws) -> (undefined, (t:errs, ws)))
+
+-- throwWarning :: Warning -> TypecheckM a
+-- throwWarning w = state (\(errs, ws) -> (undefined, (errs, w:ws)))
+
 
 -- | Convenience function for throwing an exception with the
 -- current backtrace
+--tcError :: TCError -> TypecheckM a
 tcError err =
     do bt <- asks backtrace
        throwError $ TCError err bt
@@ -116,9 +127,10 @@ tcError err =
 -- | Push the expression @expr@ and throw error err
 pushError expr err = local (pushBT expr) $ tcError err
 
+-- tcWarning :: Warning -> TypecheckM ()
 tcWarning wrn =
     do bt <- asks backtrace
-       modify (TCWarning bt wrn:)
+       state (\(errs, ws) -> (undefined, (errs, (TCWarning bt wrn):ws)))
 
 pushWarning expr wrn = local (pushBT expr) $ tcWarning wrn
 
@@ -282,6 +294,15 @@ resolveMode actual formal
   | otherwise =
       error $ "Util.hs: Cannot resolve unknown reftype: " ++ show formal
 
+catchError ::  TypecheckM a -> (TCError -> TypecheckM a) -> TypecheckM a
+catchError m tfun = mapState fn m
+  where
+    -- fn :: a -> ([TCError], [TCWarning]) ->
+    fn (val, (x:errs, ws)) =
+      let (val', (err, ws)) = runState (tfun x) ([],[])
+      in (val, (err ++ errs, ws))
+    fn (val, ([], ws)) = (val, ([], ws))
+
 assertSafeTypeArguments :: [Type] -> [Type] -> TypecheckM ()
 assertSafeTypeArguments = zipWithM_ assertSafeTypeArgument
   where
@@ -296,9 +317,9 @@ assertSafeTypeArguments = zipWithM_ assertSafeTypeArgument
           cap <- findCapability arg
           let traits = typesFromCapability cap
           mapM_ (assertSafeTypeArgument formal) traits
-          `catchError` \(TCError _ bt) ->
-                           throwError $
-                             TCError (UnsafeTypeArgumentError formal arg) bt
+          -- `catchError` \(TCError _ bt) ->
+          --                  throwError $
+          --                    TCError (UnsafeTypeArgumentError formal arg) bt
       | otherwise = do
           unlessM (isSharableType arg) $
             unless (arg `modeSubtypeOf` formal || hasMinorMode arg) $
